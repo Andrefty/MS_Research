@@ -129,10 +129,10 @@ def format_prompt_for_model(code_snippet_str, cve_desc_str, is_vulnerable_ground
     elif not is_vulnerable_ground_truth:
         prompt += "This code snippet is the non-vulnerable version.\\n"
         
-    task_description = f"Please provide a detailed explanation of why the code snippet is {hint_status}"
+    task_description = f"Please provide your detailed reasoning on why the code snippet is {hint_status}"
     if is_vulnerable_ground_truth and vulnerable_lines_info_str:
-         task_description += ", focusing on how the changes at the mentioned lines might contribute to its state"
-    task_description += ". Conclude with a clear and concise summary."
+         task_description += ", particularly considering how the changes at the mentioned lines might contribute to its state"
+    task_description += ". After you have presented your reasoning, you must conclude your response *only* with one of the following exact statements, without any additional explanatory text: '(1) YES: A security vulnerability detected.' or '(2) NO: No security vulnerability.'."
 
     prompt += f"\\nTask: {task_description}"
     return prompt
