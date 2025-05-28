@@ -2,3 +2,4 @@ PrimeVul-v0.1-hf/
 PrimeVul/
 inference_experiment/logs/
 download_gdrive/*.json
+generated_finetuning_data/

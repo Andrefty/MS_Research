@@ -145,6 +145,31 @@ def format_prompt_for_model(code_snippet_str, cve_desc_str, is_vulnerable_ground
     prompt += f"\\nTask: {task_description}"
     return prompt
 
+# --- Resume and Live Writing Utilities ---
+def get_already_processed_commit_ids(output_file_path):
+    """Check existing output file to find already processed commit IDs."""
+    processed_commit_ids = set()
+    if os.path.exists(output_file_path):
+        try:
+            with open(output_file_path, 'r', encoding='utf-8') as f:
+                for line in f:
+                    if line.strip():
+                        data = json.loads(line)
+                        if 'commit_id' in data:
+                            processed_commit_ids.add(data['commit_id'])
+            print(f"Found {len(processed_commit_ids)} already processed commit IDs in existing output file.")
+        except Exception as e:
+            print(f"Warning: Could not read existing output file {output_file_path}: {e}")
+    return processed_commit_ids
+
+def write_results_to_file(results_list, output_file_path, mode='a'):
+    """Write results to file and clear the list to save memory."""
+    if results_list:
+        with open(output_file_path, mode, encoding='utf-8') as f_out:
+            for result in results_list:
+                f_out.write(json.dumps(result) + '\n')
+        results_list.clear()
+
 # --- Main Logic ---
 def main():
     parser = argparse.ArgumentParser(description="Generate finetuning dataset from PrimeVul paired data using SGLang.")
@@ -186,6 +211,9 @@ def main():
     # Ensure output directory exists
     os.makedirs(os.path.dirname(args.output_file), exist_ok=True)
 
+    # Check for already processed commit IDs to enable resume functionality
+    already_processed_commit_ids = get_already_processed_commit_ids(args.output_file)
+
     all_samples_raw = []
     with open(args.input_file, 'r', encoding='utf-8') as f_in:
         for line in f_in:
@@ -199,10 +227,18 @@ def main():
     skipped_due_to_pairing_issue_count = 0
     skipped_due_to_token_limit_count = 0
     processed_pair_count = 0
+    skipped_due_to_already_processed_count = 0
     
     commit_ids_to_process_potentially = list(samples_by_commit_id.keys())
+    
+    # Filter out already processed commit IDs
+    commit_ids_to_process = [cid for cid in commit_ids_to_process_potentially if cid not in already_processed_commit_ids]
+    
+    print(f"Total commit_ids in input: {len(commit_ids_to_process_potentially)}")
+    print(f"Already processed commit_ids: {len(already_processed_commit_ids)}")
+    print(f"Remaining commit_ids to process: {len(commit_ids_to_process)}")
 
-    for commit_id in tqdm(commit_ids_to_process_potentially, desc="Processing commit_ids"):
+    for commit_id in tqdm(commit_ids_to_process, desc="Processing commit_ids"):
         items = samples_by_commit_id[commit_id]
         
         if len(items) != 2:
@@ -346,17 +382,22 @@ def main():
                     #     "max_new_tokens_requested": api_max_tokens_non_vuln, "seed": args.seed
                     # }
                 })
+        
+        # Write results incrementally to save memory and enable live updates
+        # Write after each commit_id is fully processed (both vuln and non-vuln)
+        if len(processed_results) >= 2:  # Should have exactly 2 results per commit_id
+            write_results_to_file(processed_results, args.output_file, mode='a')
+    
+    # Write any remaining results
+    if processed_results:
+        write_results_to_file(processed_results, args.output_file, mode='a')
     
     print(f"Finished processing.")
     print(f"Total commit_ids in input: {len(samples_by_commit_id)}")
+    print(f"Already processed commit_ids (skipped): {len(already_processed_commit_ids)}")
     print(f"Commit_ids processed as valid pairs: {processed_pair_count}")
     print(f"Commit_ids skipped due to pairing issues (not 2 items, or not one vuln/non-vuln): {skipped_due_to_pairing_issue_count}")
     print(f"Individual samples skipped due to token limit: {skipped_due_to_token_limit_count}")
-    print(f"Total results generated (individual samples): {len(processed_results)}")
-
-    with open(args.output_file, 'w', encoding='utf-8') as f_out:
-        for result in processed_results:
-            f_out.write(json.dumps(result) + '\\n')
     print(f"Generated dataset saved to {args.output_file}")
 
 if __name__ == "__main__":

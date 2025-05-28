@@ -15,7 +15,8 @@ MODEL_ID_FOR_TOKENIZER_PARAM="Qwen/Qwen3-32B"
 # Using paired_train_sample.jsonl for generating the finetuning dataset.
 INPUT_FILE_PARAM="/export/home/acs/stud/t/tudor.farcasanu/SSL_research/PrimeVul-v0.1-hf/paired/primevul_train_paired.jsonl"
 OUTPUT_BASE_DIR="/export/home/acs/stud/t/tudor.farcasanu/SSL_research/generated_finetuning_data"
-OUTPUT_FILENAME="qwen3_32b_finetune_dataset_$(date +%Y%m%d_%H%M%S).jsonl"
+# Use a fixed filename to enable resuming - change date suffix manually if you want a new run
+OUTPUT_FILENAME="qwen3_32b_finetune_dataset_resumable.jsonl"
 OUTPUT_FILE_PARAM="$OUTPUT_BASE_DIR/$OUTPUT_FILENAME"
 
 # Create output directory if it doesn't exist
@@ -38,6 +39,7 @@ echo "Model for SGLang: $MODEL_ID_FOR_SGLANG_PARAM"
 echo "Tokenizer model: $MODEL_ID_FOR_TOKENIZER_PARAM"
 echo "SGLang Host: $SGLANG_HOST_PARAM, Port: $SGLANG_PORT_PARAM"
 echo "LLM Params: Temp=$TEMPERATURE_PARAM, TopP=$TOP_P_PARAM, TopK=$TOP_K_PARAM, MinP=$MIN_P_PARAM, MaxGenLen=$MAX_GEN_LENGTH_PARAM, Seed=$SEED_PARAM, Logprobs=$LOGPROBS_PARAM, EnableThinking=$ENABLE_THINKING_PARAM"
+echo "Note: Script will automatically resume from existing output file if present"
 
 # Ensure python from the correct environment is used (job_sglang script should handle activation)
 # The './' assumes generate_finetuning_dataset_merged.py is in the same directory as this script
