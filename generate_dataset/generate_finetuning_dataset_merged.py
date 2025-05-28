@@ -166,13 +166,14 @@ def main():
     parser.add_argument('--max_gen_length', type=int, default=32768, help="Desired maximum generation length for the model's response part.") # Changed default from 8192 to 32768
     parser.add_argument('--seed', type=int, default=1337, help="Seed for model generation if supported by SGLang endpoint.")
     parser.add_argument('--min_p', type=float, default=0.0, help="min_p sampling parameter (note: may not be supported by standard OpenAI API endpoint).")
-    parser.add_argument('--logprobs', type=bool, default=True, help="Whether to request logprobs from the model.")
-    parser.add_argument('--enable_thinking', type=lambda x: (str(x).lower() == 'true'), default=True, help='(For Qwen models) Enable thinking mode. Default: True') # Added enable_thinking
+    parser.add_argument('--logprobs', type=lambda x: (str(x).lower() == 'true'), default=False, help="Whether to request logprobs from the model. Pass 'true' or 'false'.")
+    parser.add_argument('--enable_thinking', type=lambda x: (str(x).lower() == 'true'), default=True, help='(For Qwen models) Enable thinking mode. Default: True')
 
     parser.add_argument('--line_number_threshold', type=int, default=20, help="Threshold for adding line numbers to code.")
     args = parser.parse_args()
 
-    sglang_api_url = f"http://{args.sglang_host}:{args.sglang_port}/v1/chat/completions"
+    # Corrected SGLang API URL
+    sglang_api_url = f"http://{args.sglang_host}:{args.sglang_port}/v1" 
     client = OpenAI(api_key="EMPTY", base_url=sglang_api_url)
 
     tokenizer_obj, is_hf_tokenizer = get_tokenizer_for_model(args.model_id_for_tokenizer, args.local_model_path_for_tokenizer)
@@ -262,11 +263,11 @@ def main():
                     "vulnerable_lines_hint_provided": vulnerable_lines_info_str,
                     "prompt": prompt_vuln, 
                     "generated_response": generated_text_vuln,
-                    "original_func_for_reference": vuln_sample['func'],
-                    "model_params": {
-                        "temperature": args.temperature, "top_p": args.top_p, "top_k": args.top_k, 
-                        "max_new_tokens_requested": api_max_tokens_vuln, "seed": args.seed
-                    }
+                    # "original_func_for_reference": vuln_sample['func'],
+                    # "model_params": {
+                    #     "temperature": args.temperature, "top_p": args.top_p, "top_k": args.top_k, 
+                    #     "max_new_tokens_requested": api_max_tokens_vuln, "seed": args.seed
+                    # }
                 })
             except Exception as e:
                 print(f"Error (Vuln) commit_id {commit_id}, idx {vuln_sample.get('idx')}: {e}")
@@ -275,11 +276,11 @@ def main():
                     "cve_desc_used": vuln_sample.get('cve_desc', "") if vuln_sample.get('cve_desc', "").lower() not in ["none", "null", "na", "n/a", ""] else None,
                     "vulnerable_lines_hint_provided": vulnerable_lines_info_str,
                     "prompt": prompt_vuln, "generated_response": f"ERROR_SGLANG_CALL: {str(e)}",
-                    "original_func_for_reference": vuln_sample['func'],
-                    "model_params": {
-                        "temperature": args.temperature, "top_p": args.top_p, "top_k": args.top_k, 
-                        "max_new_tokens_requested": api_max_tokens_vuln, "seed": args.seed
-                    }
+                    # "original_func_for_reference": vuln_sample['func'],
+                    # "model_params": {
+                    #     "temperature": args.temperature, "top_p": args.top_p, "top_k": args.top_k, 
+                    #     "max_new_tokens_requested": api_max_tokens_vuln, "seed": args.seed
+                    # }
                 })
 
         # Process Non-Vulnerable Sample
@@ -326,11 +327,11 @@ def main():
                     "vulnerable_lines_hint_provided": None, # No specific lines hint for non-vuln
                     "prompt": prompt_non_vuln, 
                     "generated_response": generated_text_non_vuln,
-                    "original_func_for_reference": non_vuln_sample['func'],
-                    "model_params": {
-                        "temperature": args.temperature, "top_p": args.top_p, "top_k": args.top_k, 
-                        "max_new_tokens_requested": api_max_tokens_non_vuln, "seed": args.seed
-                    }
+                    # "original_func_for_reference": non_vuln_sample['func'],
+                    # "model_params": {
+                    #     "temperature": args.temperature, "top_p": args.top_p, "top_k": args.top_k, 
+                    #     "max_new_tokens_requested": api_max_tokens_non_vuln, "seed": args.seed
+                    # }
                 })
             except Exception as e:
                 print(f"Error (Non-Vuln) commit_id {commit_id}, idx {non_vuln_sample.get('idx')}: {e}")
@@ -339,11 +340,11 @@ def main():
                     "cve_desc_used": non_vuln_sample.get('cve_desc', "") if non_vuln_sample.get('cve_desc', "").lower() not in ["none", "null", "na", "n/a", ""] else None,
                     "vulnerable_lines_hint_provided": None,
                     "prompt": prompt_non_vuln, "generated_response": f"ERROR_SGLANG_CALL: {str(e)}",
-                    "original_func_for_reference": non_vuln_sample['func'],
-                    "model_params": {
-                        "temperature": args.temperature, "top_p": args.top_p, "top_k": args.top_k,
-                        "max_new_tokens_requested": api_max_tokens_non_vuln, "seed": args.seed
-                    }
+                    # "original_func_for_reference": non_vuln_sample['func'],
+                    # "model_params": {
+                    #     "temperature": args.temperature, "top_p": args.top_p, "top_k": args.top_k,
+                    #     "max_new_tokens_requested": api_max_tokens_non_vuln, "seed": args.seed
+                    # }
                 })
     
     print(f"Finished processing.")
