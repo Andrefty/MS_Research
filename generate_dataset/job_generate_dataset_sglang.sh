@@ -4,7 +4,7 @@
 #SBATCH --error=/export/home/acs/stud/t/tudor.farcasanu/SSL_research/inference_experiment/logs/slurm_logs/sglang-qwen-eval-%j.err
 #SBATCH --ntasks=1
 #SBATCH --cpus-per-task=64
-#SBATCH --mem=128G
+#SBATCH --mem=256G
 #SBATCH --gres=gpu:1
 
 # --- Configuration ---
