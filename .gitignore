@@ -3,3 +3,6 @@ PrimeVul/
 inference_experiment/logs/
 download_gdrive/*.json
 generated_finetuning_data/
+unsloth_compiled_cache/
+wandb/
+qwen3_8b_custom_finetuned/
