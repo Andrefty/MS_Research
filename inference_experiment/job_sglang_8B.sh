@@ -12,7 +12,8 @@ WORK_DIR="/export/home/acs/stud/t/tudor.farcasanu/SSL_research"
 SGLANG_ENV_PYTHON="$HOME/.conda/envs/sglangenv/bin/python"
 PRIMEVUL_ENV_NAME="primevul" # Conda environment name for the evaluation script
 
-SGLANG_MODEL_PATH="Qwen/Qwen3-8B" # Model path for SGLang server
+# SGLANG_MODEL_PATH="Qwen/Qwen3-8B" # Model path for SGLang server
+SGLANG_MODEL_PATH="/export/home/acs/stud/t/tudor.farcasanu/SSL_research/qwen3_8b_custom_finetuned/lora_model_merged_16bit" # Model path for SGLang server
 SGLANG_PORT="30000"
 SGLANG_HOST="127.0.0.1"
 

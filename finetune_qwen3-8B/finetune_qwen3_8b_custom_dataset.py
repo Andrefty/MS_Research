@@ -169,6 +169,50 @@ def main():
     if hasattr(trainer_stats, 'metrics'):
         print(f"Training stats: {trainer_stats.metrics}")
 
+    # --- Saving the Model (Optional) ---
+    print(f"Saving LoRA adapters to ./{OUTPUT_DIR}/lora_model")
+    # Save the merged model (LoRA adapters + base model)
+    # This is the model you'd typically use for inference or share.
+    merged_model_path = f"./{OUTPUT_DIR}/lora_model_merged_16bit"
+    model.save_pretrained_merged(merged_model_path, tokenizer, save_method="merged_16bit")
+    print(f"Merged model saved to {merged_model_path}")
+
+    # To save only LoRA adapters (e.g., for later merging or if you want to keep base model separate):
+    # lora_model_path = f"./{OUTPUT_DIR}/lora_adapters"
+    # model.save_pretrained(lora_model_path) 
+    # tokenizer.save_pretrained(lora_model_path)
+    # print(f"LoRA adapters saved to {lora_model_path}")
+
+    print("Model saving process complete.")
+    
+    # --- Push to Hugging Face Hub (Optional) ---
+    # Make sure you are logged in: `huggingface-cli login`
+    PUSH_TO_HUB = True # Set to True to enable uploading
+    HF_USERNAME = "Andrefty"  # <<< REPLACE WITH YOUR HF USERNAME
+    HF_MODEL_NAME = "qwen3-8b-custom-finetuned" # <<< REPLACE WITH YOUR DESIRED MODEL NAME ON HF
+
+    if PUSH_TO_HUB:
+        if HF_USERNAME == "your_hf_username" or HF_MODEL_NAME == "qwen3-8b-custom-finetuned":
+            print("\nWARNING: Please replace HF_USERNAME and HF_MODEL_NAME with your actual Hugging Face details to upload.")
+            print("Skipping Hugging Face Hub upload.")
+        else:
+            print(f"\nAttempting to push merged model to Hugging Face Hub: {HF_USERNAME}/{HF_MODEL_NAME}")
+            try:
+                # Ensure the tokenizer is also pushed with the model
+                model.push_to_hub_merged(f"{HF_USERNAME}/{HF_MODEL_NAME}", tokenizer, save_method="merged_16bit", token=True) # Use token=True to use cached login
+                print(f"Successfully pushed model and tokenizer to {HF_USERNAME}/{HF_MODEL_NAME}")
+            except Exception as e:
+                print(f"Error pushing to Hugging Face Hub: {e}")
+                print("Please ensure you have run `huggingface-cli login` and have `huggingface_hub` installed.")
+    
+    # To push only LoRA adapters to the Hub:
+    # if PUSH_TO_HUB and not (HF_USERNAME == "your_hf_username" or HF_MODEL_NAME == "qwen3-8b-custom-lora"):
+    #     print(f"\nAttempting to push LoRA adapters to Hugging Face Hub: {HF_USERNAME}/{HF_MODEL_NAME}-lora")
+    #     try:
+    #         model.push_to_hub(f"{HF_USERNAME}/{HF_MODEL_NAME}-lora", tokenizer, save_method="lora", token=True)
+    #         print(f"Successfully pushed LoRA adapters and tokenizer to {HF_USERNAME}/{HF_MODEL_NAME}-lora")
+    #     except Exception as e:
+    #         print(f"Error pushing LoRA adapters to Hugging Face Hub: {e}")
 
     # --- Inference Example (Optional) ---
     print("\n--- Running Inference Example ---")
@@ -201,17 +245,6 @@ def main():
     )
     print("\n--- Inference Example Finished ---")
 
-    # --- Saving the Model (Optional) ---
-    print(f"Saving LoRA adapters to ./{OUTPUT_DIR}/lora_model")
-    model.save_pretrained_merged(f"./{OUTPUT_DIR}/lora_model_merged_16bit", tokenizer, save_method = "merged_16bit",)
-    # model.save_pretrained_merged(f"./{OUTPUT_DIR}/lora_model_merged_4bit", tokenizer, save_method = "merged_4bit",)
-    # model.save_pretrained(f"./{OUTPUT_DIR}/lora_model") # Saves LoRA adapters only
-    # tokenizer.save_pretrained(f"./{OUTPUT_DIR}/lora_model")
-    print("Model saving process initiated. Check console for completion.")
-    
-    # To push to Hugging Face Hub:
-    # model.push_to_hub_merged("your_hf_username/your_model_name_merged_16bit", tokenizer, save_method = "merged_16bit", token = "hf_...")
-    # model.push_to_hub("your_hf_username/your_model_name_lora", tokenizer, save_method = "lora", token = "hf_...")
 
 if __name__ == "__main__":
     main()
