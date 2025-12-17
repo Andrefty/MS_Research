@@ -125,8 +125,7 @@ echo "Starting GPU monitoring (every ${GPU_MONITOR_INTERVAL}s). Log: $GPU_MONITO
 (
     while true; do
         echo "====== GPU STATUS $(date '+%Y-%m-%d %H:%M:%S') ======"
-        nvidia-smi --query-gpu=index,name,utilization.gpu,utilization.memory,memory.used,memory.total,temperature.gpu --format=csv,noheader,nounits | \
-            awk -F',' '{printf "GPU %s: %s%% GPU, %s%% MEM, %s/%s MB, %s°C\n", $1, $2, $3, $4, $5, $6}'
+        nvidia-smi
         echo ""
         sleep $GPU_MONITOR_INTERVAL
     done
