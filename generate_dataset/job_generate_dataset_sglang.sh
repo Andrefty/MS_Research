@@ -4,8 +4,8 @@
 #SBATCH --error=/export/home/acs/stud/t/tudor.farcasanu/SSL_research/inference_experiment/logs/slurm_logs/sglang-qwen-eval-%j.err
 #SBATCH --ntasks=1
 #SBATCH --cpus-per-task=64
-#SBATCH --mem=256G
-#SBATCH --gres=gpu:1
+#SBATCH --mem=300G
+#SBATCH --gres=gpu:2
 
 # --- Configuration ---
 WORK_DIR="/export/home/acs/stud/t/tudor.farcasanu/SSL_research"
@@ -53,12 +53,24 @@ cleanup() {
 trap cleanup EXIT SIGINT SIGTERM
 
 # --- Start SGLang Server ---
-echo "Starting SGLang server..."
-echo "Command: $SGLANG_ENV_PYTHON -m sglang.launch_server --model-path \"$SGLANG_MODEL_PATH\" --port \"$SGLANG_PORT\" --host \"$SGLANG_HOST\" --log-level info "
+# Ensure sglangenv bin is in PATH for ninja and other tools
+export PATH="$HOME/.conda/envs/sglangenv/bin:$PATH"
+echo "PATH updated to include sglangenv bin: $HOME/.conda/envs/sglangenv/bin"
+echo "Ninja location: $(which ninja 2>/dev/null || echo 'not found')"
+
+# Set CC/CXX/CUDAHOSTCXX to use conda GCC 11 (required for flashinfer JIT compilation)
+export CC="$HOME/.conda/envs/sglangenv/bin/x86_64-conda-linux-gnu-gcc"
+export CXX="$HOME/.conda/envs/sglangenv/bin/x86_64-conda-linux-gnu-g++"
+export CUDAHOSTCXX="$HOME/.conda/envs/sglangenv/bin/x86_64-conda-linux-gnu-g++"
+echo "Using GCC: $($CC --version | head -1)"
+
+echo "Starting SGLang server with tensor parallelism (tp=2)..."
+echo "Command: $SGLANG_ENV_PYTHON -m sglang.launch_server --model-path \"$SGLANG_MODEL_PATH\" --port \"$SGLANG_PORT\" --host \"$SGLANG_HOST\" --tp 2 --log-level info "
 nohup $SGLANG_ENV_PYTHON -m sglang.launch_server \
     --model-path "$SGLANG_MODEL_PATH" \
     --port "$SGLANG_PORT" \
     --host "$SGLANG_HOST" \
+    --tp 2 \
     --log-level info > "$SGLANG_LOG_FILE" 2>&1 &
 SGLANG_PID=$!
 echo "SGLang server started with PID: $SGLANG_PID. Log: $SGLANG_LOG_FILE"
@@ -99,11 +111,39 @@ fi
 echo "SGLang server is up. Proceeding with dataset generation script."
 # The command_generate_dataset.sh script is now responsible for calling generate_finetuning_dataset_merged.py
 # It is assumed to be in the generate_dataset directory, relative to WORK_DIR
-DATASET_GEN_SCRIPT_PATH="$WORK_DIR/generate_dataset/command_generate_dataset.sh"
+DATASET_GEN_SCRIPT_PATH="$WORK_DIR/generate_dataset/command_generate_grpo_dataset.sh"
 DATASET_GEN_CWD="$WORK_DIR/generate_dataset" # Correct CWD for the generation script
 
 echo "Running dataset generation script from $DATASET_GEN_SCRIPT_PATH in $DATASET_GEN_CWD with environment $PRIMEVUL_ENV_NAME..."
 echo "Command will be executed in a subshell to manage environment activation."
+
+# --- Start GPU Monitoring in Background ---
+GPU_MONITOR_INTERVAL=60  # seconds between GPU usage prints
+GPU_MONITOR_LOG="$LOG_DIR/gpu_monitor-$SLURM_JOB_ID.log"
+echo "Starting GPU monitoring (every ${GPU_MONITOR_INTERVAL}s). Log: $GPU_MONITOR_LOG"
+
+(
+    while true; do
+        echo "====== GPU STATUS $(date '+%Y-%m-%d %H:%M:%S') ======"
+        nvidia-smi --query-gpu=index,name,utilization.gpu,utilization.memory,memory.used,memory.total,temperature.gpu --format=csv,noheader,nounits | \
+            awk -F',' '{printf "GPU %s: %s%% GPU, %s%% MEM, %s/%s MB, %s°C\n", $1, $2, $3, $4, $5, $6}'
+        echo ""
+        sleep $GPU_MONITOR_INTERVAL
+    done
+) >> "$GPU_MONITOR_LOG" 2>&1 &
+GPU_MONITOR_PID=$!
+echo "GPU monitor started with PID: $GPU_MONITOR_PID"
+
+# Function to stop GPU monitor
+stop_gpu_monitor() {
+    if [[ -n "$GPU_MONITOR_PID" ]] && kill -0 "$GPU_MONITOR_PID" 2>/dev/null; then
+        echo "Stopping GPU monitor (PID: $GPU_MONITOR_PID)..."
+        kill "$GPU_MONITOR_PID" 2>/dev/null
+    fi
+}
+
+# Add to cleanup
+trap 'stop_gpu_monitor; cleanup' EXIT SIGINT SIGTERM
 
 (
     echo "Subshell CWD: $(pwd)"
