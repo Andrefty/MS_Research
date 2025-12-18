@@ -144,8 +144,11 @@ def main():
                         help="Log every N steps")
     
     # GRPO specific - Qwen3 thinking mode: Temp=0.6, TopP=0.95, TopK=20
-    parser.add_argument("--beta", type=float, default=0.05,
-                        help="KL divergence coefficient (beta)")
+    # NOTE: beta=0.0 means no KL divergence penalty. Recent research (Open-Reasoner-Zero,
+    # DAPO, Dr.GRPO) shows KL is not essential for GRPO and excluding it saves memory
+    # (no reference model needed) and speeds up training. See TRL docs for details.
+    parser.add_argument("--beta", type=float, default=0.0,
+                        help="KL divergence coefficient (0.0 = disabled, saves memory)")
     parser.add_argument("--temperature", type=float, default=0.6,
                         help="Sampling temperature (Qwen3 thinking: 0.6)")
     parser.add_argument("--top_p", type=float, default=0.95,

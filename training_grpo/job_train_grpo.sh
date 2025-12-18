@@ -63,6 +63,9 @@ echo "=========================================="
 cd "$TRAIN_DIR"
 
 # Qwen3 recommended params for thinking mode: Temp=0.6, TopP=0.95, TopK=20, MinP=0
+# NOTE: beta=0.0 means no KL divergence penalty. Recent research (Open-Reasoner-Zero,
+# DAPO, Dr.GRPO) shows KL is not essential for GRPO and excluding it saves memory
+# (no reference model needed) and speeds up training. See TRL docs for details.
 deepspeed --num_gpus=$NUM_GPUS train_grpo.py \
     --model_name "$SFT_CHECKPOINT" \
     --train_file "$TRAIN_FILE" \
@@ -77,7 +80,7 @@ deepspeed --num_gpus=$NUM_GPUS train_grpo.py \
     --temperature 0.6 \
     --top_p 0.95 \
     --top_k 20 \
-    --beta 0.05 \
+    --beta 0.0 \
     --save_steps 100 \
     --logging_steps 10 \
     --deepspeed ds_config_zero3.json \
