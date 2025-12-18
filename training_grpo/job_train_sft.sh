@@ -44,7 +44,7 @@ export MASTER_ADDR=localhost
 export MASTER_PORT=29500
 export NCCL_DEBUG=INFO
 export TOKENIZERS_PARALLELISM=false
-export PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True
+export PYTORCH_ALLOC_CONF=expandable_segments:True
 
 # WandB logging (optional)
 export WANDB_PROJECT="qwen3-vuln-sft"

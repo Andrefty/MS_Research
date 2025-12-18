@@ -175,7 +175,8 @@ def main():
     tokenizer = AutoTokenizer.from_pretrained(
         args.model_name,
         trust_remote_code=True,
-        padding_side="left"  # Left padding for generation
+        padding_side="left",  # Left padding for generation
+        fix_mistral_regex=True,  # Fix regex pattern issue from transformers <= 4.57.2
     )
     
     if tokenizer.pad_token is None:
@@ -212,14 +213,18 @@ def main():
         seed=args.seed,
         report_to="wandb",
         run_name=f"grpo-qwen3-4b-vuln",
-        # GRPO specific - Qwen3 thinking mode sampling
+        # GRPO specific
         num_generations=args.num_generations,
-        temperature=args.temperature,
-        top_p=args.top_p,
-        top_k=args.top_k,
-        max_new_tokens=args.max_new_tokens,
         # KL penalty
         kl_coef=args.kl_coef,
+        # Generation params passed via generation_kwargs for Qwen3 thinking mode
+        generation_kwargs={
+            "temperature": args.temperature,
+            "top_p": args.top_p,
+            "top_k": args.top_k,
+            "max_new_tokens": args.max_new_tokens,
+            "do_sample": True,
+        },
     )
     
     # Initialize trainer
