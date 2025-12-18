@@ -55,6 +55,7 @@ pip install peft  # Optional, for LoRA if needed
 
 # Install FlashAttention (with proper GCC)
 echo "Installing FlashAttention (this may take a few minutes)..."
+export MAX_JOBS=40
 pip install flash-attn --no-build-isolation
 
 # Install other utilities
