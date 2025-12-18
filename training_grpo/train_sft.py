@@ -128,7 +128,7 @@ def main():
     logger.info(f"Loading model: {args.model_name}")
     model = AutoModelForCausalLM.from_pretrained(
         args.model_name,
-        torch_dtype=torch.bfloat16 if args.bf16 else torch.float32,
+        dtype=torch.bfloat16 if args.bf16 else torch.float32,
         trust_remote_code=True,
         attn_implementation="flash_attention_2",
     )
@@ -190,7 +190,7 @@ def main():
         logging_steps=args.logging_steps,
         save_steps=args.save_steps,
         save_total_limit=3,
-        evaluation_strategy="steps" if val_dataset else "no",
+        eval_strategy="steps" if val_dataset else "no",
         eval_steps=args.save_steps if val_dataset else None,
         bf16=args.bf16,
         fp16=False,

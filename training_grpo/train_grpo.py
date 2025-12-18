@@ -185,7 +185,7 @@ def main():
     logger.info(f"Loading model: {args.model_name}")
     model = AutoModelForCausalLM.from_pretrained(
         args.model_name,
-        torch_dtype=torch.bfloat16 if args.bf16 else torch.float32,
+        dtype=torch.bfloat16 if args.bf16 else torch.float32,
         trust_remote_code=True,
         attn_implementation="flash_attention_2",
     )
