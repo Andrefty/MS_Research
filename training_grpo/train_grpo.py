@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-GRPO Training Script for Qwen3-8B.
+GRPO Training Script for Qwen3-4B.
 Uses trl GRPOTrainer with programmatic reward function.
 """
 
@@ -111,7 +111,7 @@ class VulnGRPOTrainer(GRPOTrainer):
 
 
 def main():
-    parser = argparse.ArgumentParser(description="GRPO Training for Qwen3-8B")
+    parser = argparse.ArgumentParser(description="GRPO Training for Qwen3-4B")
     
     # Model arguments
     parser.add_argument("--model_name", type=str, required=True,

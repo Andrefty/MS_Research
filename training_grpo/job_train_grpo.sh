@@ -7,7 +7,7 @@
 #SBATCH --error=logs/grpo_%j.err
 
 # ============================================
-# GRPO Training Job for Qwen3-8B
+# GRPO Training Job for Qwen3-4B
 # Runs after SFT to refine with reward-based RL
 # ============================================
 

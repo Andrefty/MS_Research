@@ -7,7 +7,7 @@
 #SBATCH --error=logs/sft_%j.err
 
 # ============================================
-# SFT Training Job for Qwen3-8B
+# SFT Training Job for Qwen3-4B
 # Uses DeepSpeed ZeRO-3 for distributed training
 # ============================================
 
@@ -44,6 +44,7 @@ export MASTER_ADDR=localhost
 export MASTER_PORT=29500
 export NCCL_DEBUG=INFO
 export TOKENIZERS_PARALLELISM=false
+export PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True
 
 # WandB logging (optional)
 export WANDB_PROJECT="qwen3-vuln-sft"
@@ -54,7 +55,7 @@ NUM_GPUS=3
 
 echo "=========================================="
 echo "Starting SFT Training"
-echo "Model: Qwen/Qwen3-8B"
+echo "Model: Qwen/Qwen3-4B"
 echo "GPUs: $NUM_GPUS"
 echo "Output: $OUTPUT_DIR"
 echo "=========================================="
@@ -63,7 +64,7 @@ echo "=========================================="
 cd "$TRAIN_DIR"
 
 deepspeed --num_gpus=$NUM_GPUS train_sft.py \
-    --model_name "Qwen/Qwen3-8B" \
+    --model_name "Qwen/Qwen3-4B" \
     --train_file "$TRAIN_FILE" \
     --val_file "$VAL_FILE" \
     --output_dir "$OUTPUT_DIR" \

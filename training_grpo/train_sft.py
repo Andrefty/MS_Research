@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-SFT Training Script for Qwen3-8B with DeepSpeed ZeRO-3.
+SFT Training Script for Qwen3-4B with DeepSpeed ZeRO-3.
 Fine-tunes on vulnerability analysis teacher responses.
 """
 
@@ -60,10 +60,10 @@ def format_chat_for_training(examples, tokenizer, max_length):
 
 
 def main():
-    parser = argparse.ArgumentParser(description="SFT Training for Qwen3-8B")
+    parser = argparse.ArgumentParser(description="SFT Training for Qwen3-4B")
     
     # Model arguments
-    parser.add_argument("--model_name", type=str, default="Qwen/Qwen3-8B",
+    parser.add_argument("--model_name", type=str, default="Qwen/Qwen3-4B",
                         help="Model name or path")
     parser.add_argument("--max_length", type=int, default=8192,
                         help="Maximum sequence length")
