@@ -199,7 +199,7 @@ def main():
         local_rank=args.local_rank,
         seed=args.seed,
         report_to="wandb",  # or "none"
-        run_name=f"sft-qwen3-8b-vuln",
+        run_name=f"sft-qwen3-4b-vuln",
         dataloader_num_workers=4,
         dataloader_pin_memory=True,
         remove_unused_columns=False,

@@ -211,7 +211,7 @@ def main():
         bf16=args.bf16,
         seed=args.seed,
         report_to="wandb",
-        run_name=f"grpo-qwen3-8b-vuln",
+        run_name=f"grpo-qwen3-4b-vuln",
         # GRPO specific - Qwen3 thinking mode sampling
         num_generations=args.num_generations,
         temperature=args.temperature,

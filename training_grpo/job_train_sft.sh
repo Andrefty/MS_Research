@@ -1,5 +1,5 @@
 #!/bin/bash
-#SBATCH --job-name=sft-qwen3-8b
+#SBATCH --job-name=sft-qwen3-4b
 #SBATCH --gres=gpu:3             # 3 GPUs
 #SBATCH --cpus-per-task=64
 #SBATCH --mem=300G
@@ -16,7 +16,7 @@ set -e
 # Paths
 WORK_DIR="/export/home/acs/stud/t/tudor.farcasanu/SSL_research"
 TRAIN_DIR="$WORK_DIR/training_grpo"
-OUTPUT_DIR="$WORK_DIR/checkpoints/sft_qwen3_8b"
+OUTPUT_DIR="$WORK_DIR/checkpoints/sft_qwen3_4b"
 TRAIN_FILE="$WORK_DIR/training_grpo/sft_dataset_train.jsonl"
 VAL_FILE="$WORK_DIR/training_grpo/sft_dataset_val.jsonl"
 
@@ -48,7 +48,7 @@ export PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True
 
 # WandB logging (optional)
 export WANDB_PROJECT="qwen3-vuln-sft"
-export WANDB_RUN_NAME="sft-qwen3-8b-$SLURM_JOB_ID"
+export WANDB_RUN_NAME="sft-qwen3-4b-$SLURM_JOB_ID"
 
 # Number of GPUs
 NUM_GPUS=3

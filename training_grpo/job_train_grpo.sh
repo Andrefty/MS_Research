@@ -1,5 +1,5 @@
 #!/bin/bash
-#SBATCH --job-name=grpo-qwen3-8b
+#SBATCH --job-name=grpo-qwen3-4b
 #SBATCH --gres=gpu:3             # 3 GPUs
 #SBATCH --cpus-per-task=64
 #SBATCH --mem=300G
@@ -16,8 +16,8 @@ set -e
 # Paths
 WORK_DIR="/export/home/acs/stud/t/tudor.farcasanu/SSL_research"
 TRAIN_DIR="$WORK_DIR/training_grpo"
-SFT_CHECKPOINT="$WORK_DIR/checkpoints/sft_qwen3_8b"  # From SFT phase
-OUTPUT_DIR="$WORK_DIR/checkpoints/grpo_qwen3_8b"
+SFT_CHECKPOINT="$WORK_DIR/checkpoints/sft_qwen3_4b"  # From SFT phase
+OUTPUT_DIR="$WORK_DIR/checkpoints/grpo_qwen3_4b"
 TRAIN_FILE="$WORK_DIR/training_grpo/sft_dataset_train.jsonl"
 
 # Create directories
@@ -47,7 +47,7 @@ export TOKENIZERS_PARALLELISM=false
 
 # WandB logging
 export WANDB_PROJECT="qwen3-vuln-grpo"
-export WANDB_RUN_NAME="grpo-qwen3-8b-$SLURM_JOB_ID"
+export WANDB_RUN_NAME="grpo-qwen3-4b-$SLURM_JOB_ID"
 
 # Number of GPUs
 NUM_GPUS=3
