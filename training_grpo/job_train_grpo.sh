@@ -77,7 +77,7 @@ deepspeed --num_gpus=$NUM_GPUS train_grpo.py \
     --temperature 0.6 \
     --top_p 0.95 \
     --top_k 20 \
-    --kl_coef 0.05 \
+    --beta 0.05 \
     --save_steps 100 \
     --logging_steps 10 \
     --deepspeed ds_config_zero3.json \

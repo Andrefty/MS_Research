@@ -144,8 +144,8 @@ def main():
                         help="Log every N steps")
     
     # GRPO specific - Qwen3 thinking mode: Temp=0.6, TopP=0.95, TopK=20
-    parser.add_argument("--kl_coef", type=float, default=0.05,
-                        help="KL divergence coefficient")
+    parser.add_argument("--beta", type=float, default=0.05,
+                        help="KL divergence coefficient (beta)")
     parser.add_argument("--temperature", type=float, default=0.6,
                         help="Sampling temperature (Qwen3 thinking: 0.6)")
     parser.add_argument("--top_p", type=float, default=0.95,
@@ -215,8 +215,8 @@ def main():
         run_name=f"grpo-qwen3-4b-vuln",
         # GRPO specific
         num_generations=args.num_generations,
-        # KL penalty
-        kl_coef=args.kl_coef,
+        # KL divergence penalty (beta)
+        beta=args.beta,
         # Generation params passed via generation_kwargs for Qwen3 thinking mode
         generation_kwargs={
             "temperature": args.temperature,
