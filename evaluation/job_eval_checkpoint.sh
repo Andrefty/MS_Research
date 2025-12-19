@@ -5,7 +5,7 @@
 #SBATCH --ntasks=1
 #SBATCH --cpus-per-task=64
 #SBATCH --mem=300G
-#SBATCH --gres=gpu:3
+#SBATCH --gres=gpu:2
 
 # =============================================================================
 # Evaluation Job Script
@@ -27,8 +27,8 @@ MODEL_NAME="sft_qwen3_4b"
 # MODEL_PATH="/export/home/acs/stud/t/tudor.farcasanu/SSL_research/checkpoints/grpo_qwen3_4b"
 # MODEL_NAME="grpo_qwen3_4b"
 
-# Number of GPUs - try 3 first, if it errors out, change to 2
-NUM_GPUS=3
+# Number of GPUs - Qwen3-4B vocab size (151936) not divisible by 3, must use 2
+NUM_GPUS=2
 
 # --- Paths ---
 WORK_DIR="/export/home/acs/stud/t/tudor.farcasanu/SSL_research"
