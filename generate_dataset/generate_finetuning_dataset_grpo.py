@@ -139,12 +139,26 @@ def format_changed_lines_hint(ground_truth_lines):
 
 
 def format_prompt_for_model_grpo(code_snippet, sample, is_vulnerable, 
-                                  ground_truth_lines=None, line_number_threshold=0):
+                                  ground_truth_lines=None, line_number_threshold=0,
+                                  include_hints=True):
     """
     Format prompt for GRPO training with JSON output format.
-        
-    For vulnerable samples: includes changed lines hint
-    For patched samples: no line hints
+    
+    Args:
+        code_snippet: The code to analyze
+        sample: Sample dict with metadata (CVE, CWE, etc.)
+        is_vulnerable: True if vulnerable, False if patched, None if unknown (eval mode)
+        ground_truth_lines: List of line numbers that were changed
+        line_number_threshold: Unused, kept for compatibility
+        include_hints: If False, skip CVE/CWE context and vulnerability hints (for evaluation)
+    
+    For training (include_hints=True):
+        - Vulnerable samples: includes CVE context and changed lines hint
+        - Patched samples: includes hint that code is patched
+    
+    For evaluation (include_hints=False):
+        - No CVE/CWE context
+        - No vulnerability/patched hints
     """
     # Always add line numbers for GRPO (need for line matching)
     lines = code_snippet.splitlines()
@@ -161,23 +175,24 @@ def format_prompt_for_model_grpo(code_snippet, sample, is_vulnerable,
         ""
     ]
     
-    # Add context section (CVE/CWE)
-    context = build_context_section(sample)
-    if context:
-        prompt_parts.append(context)
+    if include_hints:
+        # Add context section (CVE/CWE) - only when hints enabled
+        context = build_context_section(sample)
+        if context:
+            prompt_parts.append(context)
+            prompt_parts.append("")
+        
+        # Add hint about vulnerability status
+        if is_vulnerable:
+            prompt_parts.append("Hint: This code contains a security vulnerability.")
+            # Add changed lines hint for vulnerable samples
+            lines_hint = format_changed_lines_hint(ground_truth_lines)
+            if lines_hint:
+                prompt_parts.append(f"The changed lines that might be related to the vulnerability are: {lines_hint}.")
+        elif is_vulnerable is False:  # Explicitly False, not None
+            prompt_parts.append("Hint: This code is the patched (non-vulnerable) version.")
+        
         prompt_parts.append("")
-    
-    # Add hint
-    if is_vulnerable:
-        prompt_parts.append("Hint: This code contains a security vulnerability.")
-        # Add changed lines hint for vulnerable samples
-        lines_hint = format_changed_lines_hint(ground_truth_lines)
-        if lines_hint:
-            prompt_parts.append(f"The changed lines that might be related to the vulnerability are: {lines_hint}.")
-    else:
-        prompt_parts.append("Hint: This code is the patched (non-vulnerable) version.")
-    
-    prompt_parts.append("")
     
     # Add JSON output instruction
     prompt_parts.append(
