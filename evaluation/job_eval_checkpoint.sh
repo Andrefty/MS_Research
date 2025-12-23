@@ -20,12 +20,12 @@
 # MODEL_NAME="qwen3_4b_base"
 
 # Option 2: SFT checkpoint
-MODEL_PATH="/export/home/acs/stud/t/tudor.farcasanu/SSL_research/checkpoints/sft_qwen3_4b"
-MODEL_NAME="sft_qwen3_4b"
+# MODEL_PATH="/export/home/acs/stud/t/tudor.farcasanu/SSL_research/checkpoints/sft_qwen3_4b"
+# MODEL_NAME="sft_qwen3_4b"
 
 # Option 3: GRPO checkpoint
-# MODEL_PATH="/export/home/acs/stud/t/tudor.farcasanu/SSL_research/checkpoints/grpo_qwen3_4b"
-# MODEL_NAME="grpo_qwen3_4b"
+MODEL_PATH="/export/home/acs/stud/t/tudor.farcasanu/SSL_research/checkpoints/grpo_qwen3_4b"
+MODEL_NAME="grpo_qwen3_4b"
 
 # Number of GPUs - Qwen3-4B vocab size (151936) not divisible by 3, must use 2
 NUM_GPUS=2

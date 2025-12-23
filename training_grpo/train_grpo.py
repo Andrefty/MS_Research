@@ -218,8 +218,14 @@ def main():
         run_name=f"grpo-qwen3-4b-vuln",
         # GRPO specific
         num_generations=args.num_generations,
+        # CRITICAL: max_completion_length must match max_new_tokens!
+        # Default is 256 which causes 1-token completions with long prompts
+        max_completion_length=args.max_new_tokens,
         # KL divergence penalty (beta)
         beta=args.beta,
+        # Enable completion logging for debugging
+        log_completions=True,
+        # num_completions_to_print=5, # Commented out to get all the completions
         # Generation params passed via generation_kwargs for Qwen3 thinking mode
         generation_kwargs={
             "temperature": args.temperature,

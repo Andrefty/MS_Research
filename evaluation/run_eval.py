@@ -35,6 +35,77 @@ except ImportError:
     print("Warning: transformers not installed")
 
 
+# --- Constants ---
+MIN_REASONABLE_OUTPUT_SIZE = 4096  # Ensure model always has at least this much space to generate
+DEFAULT_MODEL_CAPACITY = 32768
+
+
+# --- Tokenizer Utilities ---
+_tokenizer_cache = {}
+_tokenizer_type_cache = {}
+
+
+def get_tokenizer_for_model(model_identifier, local_model_path=None):
+    """Load tokenizer for token counting."""
+    if model_identifier in _tokenizer_cache:
+        return _tokenizer_cache[model_identifier], _tokenizer_type_cache[model_identifier]
+
+    tokenizer_obj = None
+    is_hf_tokenizer = False
+
+    if AutoTokenizer is not None:
+        try:
+            path_to_try = local_model_path if local_model_path else model_identifier
+            tokenizer_obj = AutoTokenizer.from_pretrained(path_to_try, trust_remote_code=True)
+            is_hf_tokenizer = True
+            print(f"Successfully loaded Hugging Face tokenizer for: {path_to_try}")
+        except Exception as e:
+            print(f"Warning: Failed to load Hugging Face tokenizer for '{path_to_try}': {e}")
+            tokenizer_obj = None
+            is_hf_tokenizer = False
+    
+    if tokenizer_obj is None:
+        try:
+            import tiktoken
+            tokenizer_obj = tiktoken.get_encoding("cl100k_base")
+            is_hf_tokenizer = False
+            print(f"Using tiktoken cl100k_base as fallback for: {model_identifier}")
+        except ImportError:
+            print("Warning: `tiktoken` library not installed.")
+        except Exception as e:
+            print(f"Warning: Failed to load tiktoken: {e}")
+
+    _tokenizer_cache[model_identifier] = tokenizer_obj
+    _tokenizer_type_cache[model_identifier] = is_hf_tokenizer
+    return tokenizer_obj, is_hf_tokenizer
+
+
+def count_tokens(text_string, tokenizer_obj, is_hf_tokenizer):
+    """Count tokens in a string."""
+    if not text_string:
+        return 0
+    
+    if tokenizer_obj and is_hf_tokenizer:
+        return len(tokenizer_obj.encode(text_string, add_special_tokens=False))
+    elif tokenizer_obj:
+        try:
+            return len(tokenizer_obj.encode(text_string))
+        except Exception:
+            return len(text_string.split())
+    else:
+        return len(text_string.split())
+
+
+def get_total_model_capacity(model_name):
+    """Get total context length for a model."""
+    if "32B" in model_name or "qwen3" in model_name.lower() or "4B" in model_name:
+        return 32768
+    if "8B" in model_name:
+        return 32768
+    print(f"Warning: Using default model capacity of {DEFAULT_MODEL_CAPACITY} for {model_name}")
+    return DEFAULT_MODEL_CAPACITY
+
+
 # --- Prompt Formats ---
 
 def format_prompt_training(code_snippet, sample):
@@ -92,8 +163,12 @@ class ThreadSafeWriter:
 
 # --- Request Processing ---
 
-def process_single_request(client, args, sample, is_vuln, prompt, prompt_type):
-    """Process a single evaluation request."""
+def process_single_request(client, args, sample, is_vuln, prompt, prompt_type, max_tokens):
+    """Process a single evaluation request.
+    
+    Args:
+        max_tokens: Dynamic max tokens calculated based on prompt length and model capacity.
+    """
     code = sample['vuln_func'] if is_vuln else sample['patched_func']
     
     try:
@@ -106,7 +181,7 @@ def process_single_request(client, args, sample, is_vuln, prompt, prompt_type):
         response = client.chat.completions.create(
             model=args.model_id,
             messages=[{"role": "user", "content": prompt}],
-            max_tokens=args.max_gen_length,
+            max_tokens=max_tokens,  # Dynamic, based on prompt length
             temperature=args.temperature,
             top_p=args.top_p,
             extra_body=extra_body
@@ -172,7 +247,16 @@ def main():
                         choices=["training", "std_cls"],
                         help="Which prompt types to run")
     
+    # Tokenizer for token counting (to ensure prompts leave room for response)
+    parser.add_argument("--tokenizer_model", type=str, default="Qwen/Qwen3-4B",
+                        help="Model name or path for tokenizer (for token counting)")
+    
     args = parser.parse_args()
+    
+    # Setup tokenizer for token counting
+    tokenizer_obj, is_hf_tokenizer = get_tokenizer_for_model(args.tokenizer_model)
+    total_model_capacity = get_total_model_capacity(args.tokenizer_model)
+    print(f"Model capacity: {total_model_capacity} tokens, min output size: {MIN_REASONABLE_OUTPUT_SIZE}")
     
     # Setup client
     base_url = f"http://{args.sglang_host}:{args.sglang_port}/v1"
@@ -188,7 +272,10 @@ def main():
     print(f"Loaded {len(samples)} pairs")
     
     # Prepare all requests (each sample -> 2 versions (vuln/patched) x N prompts)
+    # With token length validation to ensure classification instructions aren't truncated
     requests = []
+    skipped_too_long = 0
+    
     for sample in samples:
         for is_vuln in [True, False]:
             code = sample['vuln_func'] if is_vuln else sample['patched_func']
@@ -199,14 +286,37 @@ def main():
                 else:  # std_cls
                     prompt = format_prompt_std_cls(code)
                 
-                requests.append({
-                    "sample": sample,
-                    "is_vuln": is_vuln,
-                    "prompt": prompt,
-                    "prompt_type": prompt_type
-                })
+                # Check token count to ensure enough space for response
+                prompt_tokens = count_tokens(prompt, tokenizer_obj, is_hf_tokenizer)
+                available_for_response = total_model_capacity - prompt_tokens
+                
+                # Calculate dynamic max_tokens: min of what's available and requested max
+                dynamic_max_tokens = min(args.max_gen_length, available_for_response)
+                
+                if available_for_response < MIN_REASONABLE_OUTPUT_SIZE:
+                    skipped_too_long += 1
+                    # Still add the request but mark it as skipped (for tracking)
+                    requests.append({
+                        "sample": sample,
+                        "is_vuln": is_vuln,
+                        "prompt": prompt,
+                        "prompt_type": prompt_type,
+                        "max_tokens": 0,  # Won't be used since it's skipped
+                        "skip_reason": f"prompt_too_long:{prompt_tokens}_tokens"
+                    })
+                else:
+                    requests.append({
+                        "sample": sample,
+                        "is_vuln": is_vuln,
+                        "prompt": prompt,
+                        "prompt_type": prompt_type,
+                        "max_tokens": dynamic_max_tokens,
+                        "skip_reason": None
+                    })
     
     print(f"Total requests: {len(requests)} ({len(samples)} pairs x 2 versions x {len(args.prompts)} prompts)")
+    if skipped_too_long > 0:
+        print(f"Warning: {skipped_too_long} requests have prompts too long (< {MIN_REASONABLE_OUTPUT_SIZE} tokens available for response)")
     
     # Clear output file
     open(args.output_file, 'w').close()
@@ -214,21 +324,47 @@ def main():
     # Setup writer
     writer = ThreadSafeWriter(args.output_file)
     
-    # Process with thread pool
+    # Separate requests into valid and skipped
+    valid_requests = [r for r in requests if r["skip_reason"] is None]
+    skipped_requests = [r for r in requests if r["skip_reason"] is not None]
+    
+    # Write skipped requests immediately
+    for req in skipped_requests:
+        sample = req["sample"]
+        is_vuln = req["is_vuln"]
+        skipped_result = {
+            "commit_id": sample['commit_id'],
+            "pair_id": sample.get('pair_id', sample['commit_id']),
+            "source": sample['source'],
+            "split": sample['split'],
+            "is_vulnerable": is_vuln,
+            "target": 1 if is_vuln else 0,
+            "prompt_type": req["prompt_type"],
+            "prompt": req["prompt"],
+            "response": f"SKIPPED: {req['skip_reason']}",
+            "ground_truth_lines": sample.get('deleted_lines', []) if is_vuln else []
+        }
+        writer.write(skipped_result)
+    
+    print(f"Skipped {len(skipped_requests)} requests (prompt too long)")
+    print(f"Processing {len(valid_requests)} valid requests...")
+    
+    # Process valid requests with thread pool
     processed = 0
     errors = 0
     
     with ThreadPoolExecutor(max_workers=args.concurrency) as executor:
         futures = {}
-        for req in requests:
+        for req in valid_requests:
             future = executor.submit(
                 process_single_request,
                 client, args,
-                req["sample"], req["is_vuln"], req["prompt"], req["prompt_type"]
+                req["sample"], req["is_vuln"], req["prompt"], req["prompt_type"],
+                req["max_tokens"]  # Pass dynamic max_tokens
             )
             futures[future] = req
         
-        with tqdm(total=len(requests), desc="Running evaluation") as pbar:
+        with tqdm(total=len(valid_requests), desc="Running evaluation") as pbar:
             for future in as_completed(futures):
                 result = future.result()
                 writer.write(result)
@@ -240,7 +376,7 @@ def main():
     
     writer.flush()
     
-    print(f"\nDone! Processed {processed} requests, {errors} errors")
+    print(f"\nDone! Processed {processed} requests, {errors} errors, {len(skipped_requests)} skipped")
     print(f"Responses saved to: {args.output_file}")
 
 
