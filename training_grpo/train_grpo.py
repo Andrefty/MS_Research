@@ -8,8 +8,10 @@ import os
 import json
 import argparse
 import torch
+import threading
+from pathlib import Path
 from datasets import load_dataset, Dataset
-from transformers import AutoModelForCausalLM, AutoTokenizer
+from transformers import AutoModelForCausalLM, AutoTokenizer, TrainerCallback
 from trl import GRPOConfig, GRPOTrainer
 import logging
 
@@ -17,6 +19,52 @@ from reward_function import compute_reward, parse_model_response
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
+
+
+class CompletionLoggingCallback(TrainerCallback):
+    """
+    Callback to log completions to a JSONL file during GRPO training.
+    This allows post-hoc analysis of what the model generates.
+    """
+    
+    def __init__(self, output_file: str):
+        self.output_file = output_file
+        self.lock = threading.Lock()
+        # Create parent directory if needed
+        Path(output_file).parent.mkdir(parents=True, exist_ok=True)
+        # Clear file at start
+        with open(output_file, 'w') as f:
+            pass
+        logger.info(f"Completion logging enabled: {output_file}")
+    
+    def on_log(self, args, state, control, logs=None, **kwargs):
+        """Called after each logging step. Capture completions from trainer's internal logs."""
+        trainer = kwargs.get('model', None)
+        
+        # Try to access the trainer's _logs if available (TRL stores completions there)
+        # This is a bit hacky but TRL doesn't expose a clean API for this
+        if hasattr(trainer, '_logs') and trainer._logs:
+            try:
+                prompts = trainer._logs.get('prompt', [])
+                completions = trainer._logs.get('completion', [])
+                rewards_dict = trainer._logs.get('rewards', {})
+                
+                # Get the first reward function's values
+                rewards = list(rewards_dict.values())[0] if rewards_dict else []
+                
+                with self.lock:
+                    with open(self.output_file, 'a', encoding='utf-8') as f:
+                        for i, (prompt, completion) in enumerate(zip(prompts, completions)):
+                            entry = {
+                                'step': state.global_step,
+                                'prompt_preview': prompt[:500] + '...' if len(prompt) > 500 else prompt,
+                                'completion': completion,
+                                'completion_length': len(completion),
+                                'reward': rewards[i] if i < len(rewards) else None,
+                            }
+                            f.write(json.dumps(entry) + '\n')
+            except Exception as e:
+                logger.warning(f"Failed to log completions: {e}")
 
 
 def load_grpo_dataset(data_file: str) -> Dataset:
@@ -236,6 +284,10 @@ def main():
         },
     )
     
+    # Setup completion logging callback
+    completion_log_file = os.path.join(args.output_dir, "grpo_completions.jsonl")
+    completion_callback = CompletionLoggingCallback(completion_log_file)
+    
     # Initialize trainer
     trainer = GRPOTrainer(
         model=model,
@@ -243,6 +295,7 @@ def main():
         train_dataset=train_dataset,
         processing_class=tokenizer,
         reward_funcs=reward_fn,
+        callbacks=[completion_callback],
     )
     
     # Train
