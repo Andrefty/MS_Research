@@ -39,7 +39,16 @@ OUTPUT_DIR="$WORK_DIR/evaluation_results/${MODEL_NAME}"
 SGLANG_ENV_PYTHON="$HOME/.conda/envs/sglangenv/bin/python"
 EVAL_ENV_NAME="SRI_training_standard_fa_probs2"
 
-SGLANG_PORT="30000"
+# Pick a random port to avoid collisions if multiple jobs run on the same node
+# Try to find a free port between 30000 and 40000
+while true; do
+    SGLANG_PORT=$(shuf -i 30000-40000 -n 1)
+    if ! ss -lnt | grep -q ":$SGLANG_PORT "; then
+        break
+    fi
+done
+echo "Selected SGLang Port: $SGLANG_PORT"
+
 SGLANG_HOST="127.0.0.1"
 
 # --- Setup ---
