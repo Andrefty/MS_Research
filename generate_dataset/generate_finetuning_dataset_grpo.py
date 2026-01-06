@@ -1,6 +1,7 @@
 import json
 import argparse
 import os
+import sys
 import re
 import asyncio
 from concurrent.futures import ThreadPoolExecutor
@@ -8,6 +9,10 @@ from openai import OpenAI
 from openai._types import NOT_GIVEN
 from tqdm import tqdm
 import threading
+
+# Add project root to path for utils import
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+from utils.response_parser import parse_for_reward
 
 try:
     from transformers import AutoTokenizer
@@ -208,43 +213,10 @@ def parse_model_response(response_text):
     Parse model response to extract classification and vulnerable lines.
     Returns: (classification, vulnerable_lines) or (None, None) if parsing fails.
     """
-    if not response_text:
+    classification, lines = parse_for_reward(response_text)
+    if classification is None:
         return None, None
-    
-    # Try to find JSON in the response
-    json_match = re.search(r'\{[^{}]*"classification"[^{}]*\}', response_text, re.DOTALL)
-    if json_match:
-        try:
-            data = json.loads(json_match.group())
-            classification = data.get('classification', '').upper()
-            vulnerable_lines = data.get('vulnerable_lines', [])
-            
-            # Normalize classification
-            if 'VULNERABLE' in classification and 'NOT' not in classification:
-                classification = 'VULNERABLE'
-            elif 'NOT' in classification or classification == 'NOT_VULNERABLE':
-                classification = 'NOT_VULNERABLE'
-            else:
-                classification = None
-            
-            # Ensure vulnerable_lines is a list of ints
-            if isinstance(vulnerable_lines, list):
-                vulnerable_lines = [int(x) for x in vulnerable_lines if isinstance(x, (int, float))]
-            else:
-                vulnerable_lines = []
-            
-            return classification, vulnerable_lines
-        except (json.JSONDecodeError, ValueError):
-            pass
-    
-    # Fallback: try to extract from text patterns
-    response_upper = response_text.upper()
-    if 'NOT_VULNERABLE' in response_upper or 'NOT VULNERABLE' in response_upper or '(2) NO' in response_upper:
-        return 'NOT_VULNERABLE', []
-    elif 'VULNERABLE' in response_upper or '(1) YES' in response_upper:
-        return 'VULNERABLE', []
-    
-    return None, None
+    return classification, lines
 
 
 # --- Resume and Live Writing Utilities ---

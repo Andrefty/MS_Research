@@ -42,6 +42,7 @@ def prepare_sft_dataset(input_file: str, output_file: str, max_samples: int = No
     samples = []
     skipped_errors = 0
     skipped_no_response = 0
+    skipped_incomplete = 0  # Missing </think> or failed parsing
     
     with open(input_file, 'r', encoding='utf-8') as f:
         for line in tqdm(f, desc="Processing samples"):
@@ -58,6 +59,16 @@ def prepare_sft_dataset(input_file: str, output_file: str, max_samples: int = No
             response = data.get('generated_response', '')
             if not response or response.startswith('ERROR_'):
                 skipped_no_response += 1
+                continue
+            
+            # Skip samples where model didn't complete thinking (no </think> tag)
+            # or where parsing failed (parsed_classification is None)
+            # These indicate truncated/stuck generation
+            has_think_end = '</think>' in response
+            parsed_ok = data.get('parsed_classification') is not None
+            
+            if not has_think_end or not parsed_ok:
+                skipped_incomplete += 1
                 continue
             
             # Create SFT training sample
@@ -77,6 +88,7 @@ def prepare_sft_dataset(input_file: str, output_file: str, max_samples: int = No
     print(f"\nTotal samples processed: {len(samples)}")
     print(f"Skipped (JSON errors): {skipped_errors}")
     print(f"Skipped (no/error response): {skipped_no_response}")
+    print(f"Skipped (incomplete/unparseable): {skipped_incomplete}")
     
     # Save output
     output_path = Path(output_file)

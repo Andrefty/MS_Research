@@ -49,6 +49,9 @@ export TOKENIZERS_PARALLELISM=false
 export WANDB_PROJECT="qwen3-vuln-grpo"
 export WANDB_RUN_NAME="grpo-qwen3-4b-$SLURM_JOB_ID"
 
+# Completion logging for debugging (logs all completions during training)
+export GRPO_COMPLETION_LOG="$OUTPUT_DIR/grpo_completions_debug.jsonl"
+
 # Number of GPUs
 NUM_GPUS=3
 

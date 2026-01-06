@@ -20,44 +20,19 @@ Usage:
 import json
 import argparse
 import os
+import sys
 import re
 from collections import defaultdict
 from sklearn.metrics import f1_score, precision_score, recall_score, accuracy_score
 
+# Add parent directory to path for utils import
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+from utils.response_parser import parse_for_metrics
+
 
 def parse_prediction_training(response_text):
-    """Parse training-format response (JSON output)."""
-    if not response_text or response_text.startswith("ERROR:"):
-        return None, None
-    
-    response = response_text.lower()
-    
-    # Remove thinking block
-    if "</think>" in response:
-        response = response.split("</think>", 1)[1].strip()
-    
-    # Try to find JSON
-    json_match = re.search(r'\{[^{}]*"classification"[^{}]*\}', response, re.DOTALL)
-    if json_match:
-        try:
-            data = json.loads(json_match.group())
-            classification = data.get('classification', '').upper()
-            vulnerable_lines = data.get('vulnerable_lines', [])
-            
-            if 'NOT_VULNERABLE' in classification or 'NOT VULNERABLE' in classification:
-                return 0, vulnerable_lines
-            elif 'VULNERABLE' in classification:
-                return 1, vulnerable_lines
-        except (json.JSONDecodeError, ValueError):
-            pass
-    
-    # Fallback: text patterns
-    if 'not_vulnerable' in response or 'not vulnerable' in response:
-        return 0, []
-    elif 'vulnerable' in response:
-        return 1, []
-    
-    return None, None
+    """Parse training-format response (JSON output) using centralized parser."""
+    return parse_for_metrics(response_text)
 
 
 def parse_prediction_std_cls(response_text):

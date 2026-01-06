@@ -4,58 +4,15 @@ Reward function for GRPO training.
 Computes multi-level rewards based on classification accuracy and line matching.
 """
 
-import re
-import json
+import sys
+import os
+
+# Add parent directory to path for utils import
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+
 from typing import Tuple, List, Optional
+from utils.response_parser import parse_for_reward as parse_model_response
 
-
-def parse_model_response(response_text: str) -> Tuple[Optional[str], List[int]]:
-    """
-    Parse model response to extract classification and vulnerable lines.
-    
-    Expected JSON format in response:
-    {"classification": "VULNERABLE" or "NOT_VULNERABLE", "vulnerable_lines": [...], "reasoning_summary": "..."}
-    
-    Returns:
-        (classification, vulnerable_lines) or (None, []) if parsing fails
-    """
-    if not response_text:
-        return None, []
-    
-    # Try to find JSON in the response
-    json_match = re.search(r'\{[^{}]*"classification"[^{}]*\}', response_text, re.DOTALL)
-    if json_match:
-        try:
-            data = json.loads(json_match.group())
-            classification = data.get('classification', '').upper()
-            vulnerable_lines = data.get('vulnerable_lines', [])
-            
-            # Normalize classification
-            if 'VULNERABLE' in classification and 'NOT' not in classification:
-                classification = 'VULNERABLE'
-            elif 'NOT' in classification or classification == 'NOT_VULNERABLE':
-                classification = 'NOT_VULNERABLE'
-            else:
-                classification = None
-            
-            # Ensure vulnerable_lines is a list of ints
-            if isinstance(vulnerable_lines, list):
-                vulnerable_lines = [int(x) for x in vulnerable_lines if isinstance(x, (int, float))]
-            else:
-                vulnerable_lines = []
-            
-            return classification, vulnerable_lines
-        except (json.JSONDecodeError, ValueError):
-            pass
-    
-    # Fallback: try to extract from text patterns
-    response_upper = response_text.upper()
-    if 'NOT_VULNERABLE' in response_upper or 'NOT VULNERABLE' in response_upper:
-        return 'NOT_VULNERABLE', []
-    elif 'VULNERABLE' in response_upper:
-        return 'VULNERABLE', []
-    
-    return None, []
 
 
 def compute_line_accuracy(predicted_lines: List[int], ground_truth_lines: List[int]) -> float:
@@ -143,6 +100,38 @@ def batch_compute_rewards(
 
 
 # For use with trl GRPOTrainer
+# Completion logging for debugging
+import os
+import threading
+
+_completion_log_lock = threading.Lock()
+_completion_log_path = os.environ.get('GRPO_COMPLETION_LOG', None)
+_step_counter = [0]  # Mutable to track steps across calls
+
+
+def log_completion(step: int, prompt: str, completion: str, reward: float, is_vulnerable: bool, gt_lines: List[int]):
+    """Log a single completion to file for debugging."""
+    if not _completion_log_path:
+        return
+    
+    try:
+        with _completion_log_lock:
+            with open(_completion_log_path, 'a', encoding='utf-8') as f:
+                log_entry = {
+                    "step": step,
+                    "timestamp": __import__('datetime').datetime.now().isoformat(),
+                    "is_vulnerable": is_vulnerable,
+                    "ground_truth_lines": gt_lines,
+                    "prompt_preview": prompt[:500] if prompt else "",
+                    "completion_length": len(completion) if completion else 0,
+                    "completion": completion,
+                    "reward": reward,
+                }
+                f.write(json.dumps(log_entry, ensure_ascii=False) + '\n')
+    except Exception as e:
+        print(f"Warning: Failed to log completion: {e}")
+
+
 def reward_function_for_grpo(completions: List[str], **kwargs) -> List[float]:
     """
     Reward function compatible with trl GRPOTrainer.
@@ -150,14 +139,28 @@ def reward_function_for_grpo(completions: List[str], **kwargs) -> List[float]:
     Expects kwargs to contain:
     - is_vulnerable: List[bool]
     - ground_truth_lines: List[List[int]]
+    - prompts (optional): List[str] for logging
     
     Returns:
         List of reward floats
     """
     is_vulnerable_list = kwargs.get('is_vulnerable', [True] * len(completions))
     ground_truth_lines_list = kwargs.get('ground_truth_lines', [[]] * len(completions))
+    prompts = kwargs.get('prompts', [''] * len(completions))
     
-    return batch_compute_rewards(completions, is_vulnerable_list, ground_truth_lines_list)
+    rewards = batch_compute_rewards(completions, is_vulnerable_list, ground_truth_lines_list)
+    
+    # Log completions for debugging if GRPO_COMPLETION_LOG is set
+    if _completion_log_path:
+        _step_counter[0] += 1
+        current_step = _step_counter[0]
+        for i, (comp, reward, is_vuln, gt_lines, prompt) in enumerate(
+            zip(completions, rewards, is_vulnerable_list, ground_truth_lines_list, prompts)
+        ):
+            log_completion(current_step, prompt, comp, reward, is_vuln, gt_lines)
+    
+    return rewards
+
 
 
 if __name__ == "__main__":
