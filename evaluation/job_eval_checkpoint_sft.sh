@@ -1,5 +1,5 @@
 #!/bin/bash
-#SBATCH --job-name=eval-base
+#SBATCH --job-name=eval-sft
 #SBATCH --output=/export/home/acs/stud/t/tudor.farcasanu/SSL_research/logs/eval_%j.out
 #SBATCH --error=/export/home/acs/stud/t/tudor.farcasanu/SSL_research/logs/eval_%j.err
 #SBATCH --ntasks=1
@@ -16,12 +16,12 @@
 # Change these to evaluate different checkpoints:
 
 # Option 1: Stock Qwen3-4B (baseline)
-MODEL_PATH="Qwen/Qwen3-4B"
-MODEL_NAME="qwen3_4b_base"
+# MODEL_PATH="Qwen/Qwen3-4B"
+# MODEL_NAME="qwen3_4b_base"
 
 # Option 2: SFT checkpoint
-# MODEL_PATH="/export/home/acs/stud/t/tudor.farcasanu/SSL_research/checkpoints/sft_qwen3_4b"
-# MODEL_NAME="sft_qwen3_4b"
+MODEL_PATH="/export/home/acs/stud/t/tudor.farcasanu/SSL_research/checkpoints/sft_qwen3_4b"
+MODEL_NAME="sft_qwen3_4b"
 
 # Option 3: GRPO checkpoint
 # MODEL_PATH="/export/home/acs/stud/t/tudor.farcasanu/SSL_research/checkpoints/grpo_qwen3_4b"

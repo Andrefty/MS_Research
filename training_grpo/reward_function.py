@@ -103,33 +103,58 @@ def batch_compute_rewards(
 # Completion logging for debugging
 import os
 import threading
+import json as json_module  # Alias to avoid conflict
+from datetime import datetime
 
 _completion_log_lock = threading.Lock()
-_completion_log_path = os.environ.get('GRPO_COMPLETION_LOG', None)
 _step_counter = [0]  # Mutable to track steps across calls
+_first_call_logged = [False]  # Track if we've logged first call
 
 
-def log_completion(step: int, prompt: str, completion: str, reward: float, is_vulnerable: bool, gt_lines: List[int]):
-    """Log a single completion to file for debugging."""
-    if not _completion_log_path:
+def get_log_path():
+    """Get log path from env var, checked each time."""
+    return os.environ.get('GRPO_COMPLETION_LOG', None)
+
+
+def log_completions_batch(completions: List[str], rewards: List[float], 
+                          is_vulnerable_list: List[bool], ground_truth_lines_list: List[List[int]]):
+    """Log a batch of completions to file for debugging."""
+    log_path = get_log_path()
+    
+    # Always print first call info for debugging
+    if not _first_call_logged[0]:
+        _first_call_logged[0] = True
+        print(f"[reward_function] First call received {len(completions)} completions")
+        print(f"[reward_function] GRPO_COMPLETION_LOG = {log_path}")
+        if completions:
+            print(f"[reward_function] First completion length: {len(completions[0])}")
+            print(f"[reward_function] First completion preview: {completions[0][:200]}...")
+    
+    if not log_path:
         return
+    
+    _step_counter[0] += 1
+    current_step = _step_counter[0]
     
     try:
         with _completion_log_lock:
-            with open(_completion_log_path, 'a', encoding='utf-8') as f:
-                log_entry = {
-                    "step": step,
-                    "timestamp": __import__('datetime').datetime.now().isoformat(),
-                    "is_vulnerable": is_vulnerable,
-                    "ground_truth_lines": gt_lines,
-                    "prompt_preview": prompt[:500] if prompt else "",
-                    "completion_length": len(completion) if completion else 0,
-                    "completion": completion,
-                    "reward": reward,
-                }
-                f.write(json.dumps(log_entry, ensure_ascii=False) + '\n')
+            with open(log_path, 'a', encoding='utf-8') as f:
+                for i, (comp, reward, is_vuln, gt_lines) in enumerate(
+                    zip(completions, rewards, is_vulnerable_list, ground_truth_lines_list)
+                ):
+                    log_entry = {
+                        "step": current_step,
+                        "idx": i,
+                        "timestamp": datetime.now().isoformat(),
+                        "is_vulnerable": is_vuln,
+                        "ground_truth_lines": gt_lines,
+                        "completion_length": len(comp) if comp else 0,
+                        "completion": comp,
+                        "reward": reward,
+                    }
+                    f.write(json_module.dumps(log_entry, ensure_ascii=False) + '\n')
     except Exception as e:
-        print(f"Warning: Failed to log completion: {e}")
+        print(f"[reward_function] Warning: Failed to log completion: {e}")
 
 
 def reward_function_for_grpo(completions: List[str], **kwargs) -> List[float]:
@@ -139,25 +164,17 @@ def reward_function_for_grpo(completions: List[str], **kwargs) -> List[float]:
     Expects kwargs to contain:
     - is_vulnerable: List[bool]
     - ground_truth_lines: List[List[int]]
-    - prompts (optional): List[str] for logging
     
     Returns:
         List of reward floats
     """
     is_vulnerable_list = kwargs.get('is_vulnerable', [True] * len(completions))
     ground_truth_lines_list = kwargs.get('ground_truth_lines', [[]] * len(completions))
-    prompts = kwargs.get('prompts', [''] * len(completions))
     
     rewards = batch_compute_rewards(completions, is_vulnerable_list, ground_truth_lines_list)
     
-    # Log completions for debugging if GRPO_COMPLETION_LOG is set
-    if _completion_log_path:
-        _step_counter[0] += 1
-        current_step = _step_counter[0]
-        for i, (comp, reward, is_vuln, gt_lines, prompt) in enumerate(
-            zip(completions, rewards, is_vulnerable_list, ground_truth_lines_list, prompts)
-        ):
-            log_completion(current_step, prompt, comp, reward, is_vuln, gt_lines)
+    # Log completions for debugging
+    log_completions_batch(completions, rewards, is_vulnerable_list, ground_truth_lines_list)
     
     return rewards
 

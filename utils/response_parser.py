@@ -156,12 +156,20 @@ def parse_model_response(
     
     if json_data is None:
         # No JSON found - check for keywords as last resort
-        response_upper = response_text.upper()
-        if 'NOT_VULNERABLE' in response_upper or 'NOT VULNERABLE' in response_upper:
-            return ParseResult('NOT_VULNERABLE', [], "KEYWORD_ONLY", None)
-        elif 'VULNERABLE' in response_upper:
-            return ParseResult('VULNERABLE', [], "KEYWORD_ONLY", None)
-        return ParseResult(None, [], "NO_JSON", None)
+        # BUT only if model finished thinking (has </think> tag)
+        # Otherwise the model was stuck/truncated mid-thinking
+        has_think_end = '</think>' in response_text.lower()
+        
+        if has_think_end:
+            response_upper = response_text.upper()
+            if 'NOT_VULNERABLE' in response_upper or 'NOT VULNERABLE' in response_upper:
+                return ParseResult('NOT_VULNERABLE', [], "KEYWORD_ONLY", None)
+            elif 'VULNERABLE' in response_upper:
+                return ParseResult('VULNERABLE', [], "KEYWORD_ONLY", None)
+            return ParseResult(None, [], "NO_JSON", None)
+        else:
+            # Model didn't finish thinking - incomplete response
+            return ParseResult(None, [], "INCOMPLETE", None)
     
     # JSON found - extract fields
     raw_classification = json_data.get('classification', '')
