@@ -15,7 +15,7 @@ from transformers import AutoModelForCausalLM, AutoTokenizer, TrainerCallback
 from trl import GRPOConfig, GRPOTrainer
 import logging
 
-from reward_function import compute_reward, parse_model_response
+from reward_function import compute_reward, parse_model_response, reward_function_for_grpo
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -102,30 +102,36 @@ def create_reward_function(tokenizer):
     Create reward function that works with GRPOTrainer.
     
     GRPOTrainer expects: reward_fn(completions, prompts, ...) -> List[float]
+    
+    This wraps reward_function_for_grpo from reward_function.py which includes
+    debug logging when GRPO_COMPLETION_LOG env var is set.
     """
+    _first_call = [True]  # Track first call for debugging
+    
     def reward_fn(completions, prompts=None, **kwargs):
         """
         Compute rewards for completions.
-        
-        Note: We need to pass ground truth info through the prompts or a side channel.
-        For simplicity, we'll encode the ground truth in the prompt parsing.
         """
-        rewards = []
-        
-        for i, completion in enumerate(completions):
-            # Decode if tensor
+        # Decode completions if they're tensors
+        text_completions = []
+        for completion in completions:
             if hasattr(completion, 'tolist'):
                 text = tokenizer.decode(completion, skip_special_tokens=True)
             else:
                 text = completion
-            
-            # For now, use default values - will be overridden in custom trainer
-            # In practice, you'd need to match completions back to their metadata
-            is_vulnerable = kwargs.get('is_vulnerable', [True] * len(completions))[i] if 'is_vulnerable' in kwargs else True
-            ground_truth_lines = kwargs.get('ground_truth_lines', [[]] * len(completions))[i] if 'ground_truth_lines' in kwargs else []
-            
-            reward = compute_reward(text, is_vulnerable, ground_truth_lines)
-            rewards.append(reward)
+            text_completions.append(text)
+        
+        # Debug: print on first call to verify we receive completions
+        if _first_call[0]:
+            _first_call[0] = False
+            print(f"[REWARD_FN_DEBUG] First call received {len(text_completions)} completions", flush=True)
+            if text_completions:
+                print(f"[REWARD_FN_DEBUG] First completion length: {len(text_completions[0])}", flush=True)
+                print(f"[REWARD_FN_DEBUG] First completion preview: {text_completions[0][:500]}...", flush=True)
+        
+        # Use centralized reward function from reward_function.py
+        # This includes logging when GRPO_COMPLETION_LOG is set
+        rewards = reward_function_for_grpo(text_completions, **kwargs)
         
         return rewards
     

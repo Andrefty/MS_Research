@@ -38,6 +38,7 @@ def compute_reward(
     response: str,
     is_vulnerable: bool,
     ground_truth_lines: List[int],
+    _log_first: list = [True],  # Mutable default to track first call
 ) -> float:
     """
     Compute multi-level reward for GRPO training.
@@ -58,6 +59,14 @@ def compute_reward(
     """
     # Parse response
     classification, predicted_lines = parse_model_response(response)
+    
+    # Debug: log first few calls to show exactly what we're parsing
+    if _log_first[0]:
+        _log_first[0] = False
+        print(f"[compute_reward DEBUG] Response length: {len(response)}", flush=True)
+        print(f"[compute_reward DEBUG] Response repr: {repr(response[:200])}", flush=True)
+        print(f"[compute_reward DEBUG] Parsed classification: {classification}", flush=True)
+        print(f"[compute_reward DEBUG] Parsed lines: {predicted_lines}", flush=True)
     
     # Check classification correctness
     expected_class = "VULNERABLE" if is_vulnerable else "NOT_VULNERABLE"
