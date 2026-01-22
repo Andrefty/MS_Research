@@ -71,7 +71,9 @@ NUM_GPUS=3
 cd "$TRAIN_DIR"
 
 # Install veRL (not included in base image) and run training
+# --writable-tmpfs allows pip install in read-only container
 apptainer exec --nv \
+    --writable-tmpfs \
     --bind $WORK_DIR:$WORK_DIR \
     --bind $HOME:$HOME \
     $VERL_IMAGE \
@@ -83,7 +85,7 @@ apptainer exec --nv \
             algorithm.adv_estimator=grpo \
             data.train_files=$DATA_DIR/train.parquet \
             data.val_files=$DATA_DIR/val.parquet \
-            data.train_batch_size=64 \
+            data.train_batch_size=60 \
             data.max_prompt_length=28672 \
             data.max_response_length=32768 \
             data.truncation=left \
@@ -107,7 +109,7 @@ apptainer exec --nv \
             actor_rollout_ref.rollout.temperature=0.6 \
             actor_rollout_ref.rollout.top_p=0.95 \
             actor_rollout_ref.rollout.top_k=20 \
-            actor_rollout_ref.rollout.min_p=0 \
+            +actor_rollout_ref.rollout.engine_kwargs.vllm.min_p=0.0 \
             actor_rollout_ref.rollout.n=4 \
             actor_rollout_ref.ref.fsdp_config.param_offload=True \
             actor_rollout_ref.ref.fsdp_config.model_dtype=bf16 \
