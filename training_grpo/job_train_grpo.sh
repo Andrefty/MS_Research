@@ -21,7 +21,7 @@ OUTPUT_DIR="$WORK_DIR/checkpoints/grpo_qwen3_4b_verl"
 DATA_DIR="$TRAIN_DIR/verl_data"
 
 # veRL docker image via apptainer
-VERL_IMAGE="$HOME/verl_vllm012.latest.sif"
+VERL_IMAGE="$WORK_DIR/verl_vllm012.latest.sif"
 
 # Create directories
 mkdir -p "$OUTPUT_DIR"
