@@ -2,10 +2,9 @@
 #SBATCH --job-name=verl-grpo
 #SBATCH --gres=gpu:3             # 3 GPUs
 #SBATCH --cpus-per-task=64
-#SBATCH --mem=300G
+#SBATCH --mem=500G
 #SBATCH --output=logs/verl_grpo_%j.out
 #SBATCH --error=logs/verl_grpo_%j.err
-#SBATCH --time=48:00:00
 
 # ============================================
 # veRL GRPO Training Job for Qwen3-4B
