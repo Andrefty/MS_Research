@@ -58,6 +58,9 @@ export GRPO_COMPLETION_LOG="$OUTPUT_DIR/verl_completions_debug.jsonl"
 # Number of GPUs
 NUM_GPUS=3
 
+# Unset ROCR_VISIBLE_DEVICES to avoid conflict with CUDA_VISIBLE_DEVICES in veRL
+unset ROCR_VISIBLE_DEVICES
+
 # ============================================
 # veRL GRPO Training Configuration
 # ============================================
