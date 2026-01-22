@@ -78,13 +78,14 @@ def flatten_for_parquet(sample: dict) -> dict:
     """
     Flatten nested structures for parquet storage.
     veRL reads these fields directly.
+    Note: extra_info must remain a dict (not JSON string) as veRL calls .get() on it.
     """
     return {
         "data_source": sample["data_source"],
         "prompt": json.dumps(sample["prompt"]),  # JSON string for message list
         "ability": sample["ability"],
         "ground_truth": sample["reward_model"]["ground_truth"],
-        "extra_info": json.dumps(sample["extra_info"])
+        "extra_info": sample["extra_info"]  # Keep as dict, veRL expects .get() to work
     }
 
 
