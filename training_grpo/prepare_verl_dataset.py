@@ -78,13 +78,13 @@ def flatten_for_parquet(sample: dict) -> dict:
     """
     Flatten nested structures for parquet storage.
     veRL reads these fields directly.
-    Note: extra_info must remain a dict (not JSON string) as veRL calls .get() on it.
+    Note: extra_info and reward_model must remain as dicts as veRL calls .get() on them.
     """
     return {
         "data_source": sample["data_source"],
         "prompt": json.dumps(sample["prompt"]),  # JSON string for message list
         "ability": sample["ability"],
-        "ground_truth": sample["reward_model"]["ground_truth"],
+        "reward_model": sample["reward_model"],  # Keep as dict, veRL expects ["ground_truth"]
         "extra_info": sample["extra_info"]  # Keep as dict, veRL expects .get() to work
     }
 
@@ -100,24 +100,24 @@ def save_parquet_with_datasets(samples: list, output_path: str):
 
 
 def save_parquet_direct(samples: list, output_path: str):
-    """Save directly using pyarrow."""
-    # Define schema
-    schema = pa.schema([
-        ("data_source", pa.string()),
-        ("prompt", pa.string()),
-        ("ability", pa.string()),
-        ("ground_truth", pa.string()),
-        ("extra_info", pa.string())
-    ])
-    
-    # Convert to columnar format
+    """Save directly using pyarrow. Note: This flattens dicts to JSON strings."""
+    # Convert dicts to JSON strings for pyarrow compatibility
+    # (HuggingFace datasets handles dicts natively, use that method if available)
     columns = {
         "data_source": [s["data_source"] for s in samples],
         "prompt": [s["prompt"] for s in samples],
         "ability": [s["ability"] for s in samples],
-        "ground_truth": [s["ground_truth"] for s in samples],
-        "extra_info": [s["extra_info"] for s in samples]
+        "reward_model": [json.dumps(s["reward_model"]) for s in samples],
+        "extra_info": [json.dumps(s["extra_info"]) for s in samples]
     }
+    
+    schema = pa.schema([
+        ("data_source", pa.string()),
+        ("prompt", pa.string()),
+        ("ability", pa.string()),
+        ("reward_model", pa.string()),  # JSON string
+        ("extra_info", pa.string())  # JSON string
+    ])
     
     table = pa.table(columns, schema=schema)
     pq.write_table(table, output_path)

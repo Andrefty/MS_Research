@@ -23,9 +23,19 @@
 # MODEL_PATH="/export/home/acs/stud/t/tudor.farcasanu/SSL_research/checkpoints/sft_qwen3_4b"
 # MODEL_NAME="sft_qwen3_4b"
 
-# Option 3: GRPO checkpoint
-MODEL_PATH="/export/home/acs/stud/t/tudor.farcasanu/SSL_research/checkpoints/grpo_qwen3_4b"
-MODEL_NAME="grpo_qwen3_4b"
+# Option 3: TRL GRPO checkpoint (old)
+# MODEL_PATH="/export/home/acs/stud/t/tudor.farcasanu/SSL_research/checkpoints/grpo_qwen3_4b"
+# MODEL_NAME="grpo_qwen3_4b"
+
+# Option 4: veRL GRPO checkpoint (new)
+# veRL saves FSDP checkpoints at: <output_dir>/global_step_X/actor/
+# After merging with verl.model_merger, HF-format model is at: <output_dir>/global_step_X/actor/huggingface/
+# Or use the provided merged checkpoint path directly if already merged.
+VERL_CKPT_DIR="/export/home/acs/stud/t/tudor.farcasanu/SSL_research/checkpoints/grpo_qwen3_4b_verl"
+# Find the latest checkpoint step (reads from latest_checkpointed_iteration.txt or find latest global_step_*)
+LATEST_STEP=$(cat "$VERL_CKPT_DIR/latest_checkpointed_iteration.txt" 2>/dev/null || ls -d "$VERL_CKPT_DIR"/global_step_* 2>/dev/null | sort -V | tail -1 | xargs basename | sed 's/global_step_//')
+MODEL_PATH="$VERL_CKPT_DIR/global_step_${LATEST_STEP}/actor/huggingface"
+MODEL_NAME="grpo_qwen3_4b_verl"
 
 # Number of GPUs - Qwen3-4B vocab size (151936) not divisible by 3, must use 2
 NUM_GPUS=2
@@ -68,6 +78,37 @@ echo "Model Name: $MODEL_NAME"
 echo "Num GPUs: $NUM_GPUS"
 echo "Output Dir: $OUTPUT_DIR"
 echo "========================================"
+
+# --- Merge veRL checkpoint if needed ---
+# veRL saves FSDP sharded checkpoints that need to be merged to HF format for inference
+if [[ "$MODEL_NAME" == *"verl"* ]] && [[ ! -f "$MODEL_PATH/config.json" ]]; then
+    echo ""
+    echo "veRL checkpoint detected but HF model not found at: $MODEL_PATH"
+    echo "Attempting to merge FSDP checkpoint..."
+    
+    FSDP_ACTOR_DIR="$VERL_CKPT_DIR/global_step_${LATEST_STEP}/actor"
+    if [[ -d "$FSDP_ACTOR_DIR" ]]; then
+        # Use veRL's model merger to convert FSDP checkpoint to HF format
+        # This runs inside the veRL container
+        apptainer exec --nv \
+            --bind "$WORK_DIR:$WORK_DIR" \
+            "$WORK_DIR/verl_vllm012.latest.sif" \
+            python3 -m verl.model_merger merge \
+                --backend fsdp \
+                --local_dir "$FSDP_ACTOR_DIR" \
+                --target_dir "$MODEL_PATH"
+        
+        if [[ $? -eq 0 ]] && [[ -f "$MODEL_PATH/config.json" ]]; then
+            echo "Successfully merged FSDP checkpoint to HF format!"
+        else
+            echo "ERROR: Failed to merge FSDP checkpoint" >&2
+            exit 1
+        fi
+    else
+        echo "ERROR: FSDP checkpoint directory not found: $FSDP_ACTOR_DIR" >&2
+        exit 1
+    fi
+fi
 
 SGLANG_PID=""
 
