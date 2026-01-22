@@ -111,7 +111,10 @@ apptainer exec --nv \
             actor_rollout_ref.rollout.top_k=20 \
             +actor_rollout_ref.rollout.engine_kwargs.vllm.min_p=0.0 \
             actor_rollout_ref.rollout.n=4 \
+            actor_rollout_ref.rollout.log_prob_micro_batch_size_per_gpu=8 \
+            actor_rollout_ref.rollout.disable_log_stats=False \
             actor_rollout_ref.ref.fsdp_config.param_offload=True \
+            actor_rollout_ref.ref.log_prob_micro_batch_size_per_gpu=8 \
             actor_rollout_ref.ref.fsdp_config.model_dtype=bf16 \
             algorithm.use_kl_in_reward=False \
             custom_reward_function.path=$TRAIN_DIR/reward_function.py \
