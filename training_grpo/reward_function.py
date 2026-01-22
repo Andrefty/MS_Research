@@ -2,16 +2,22 @@
 """
 Reward function for GRPO training.
 Computes multi-level rewards based on classification accuracy and line matching.
+
+Supports both:
+- TRL GRPOTrainer (reward_function_for_grpo)
+- veRL trainer (compute_score)
 """
 
 import sys
 import os
+import json
 
 # Add parent directory to path for utils import
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from typing import Tuple, List, Optional
 from utils.response_parser import parse_for_reward as parse_model_response
+from utils.response_parser import parse_model_response as parse_model_response_full
 
 
 
@@ -47,7 +53,8 @@ def compute_reward(
     - 1.0: Correct classification + ≥50% vulnerable lines correct
     - 0.6: Correct classification only
     - 0.3: Some correct lines but wrong classification
-    - 0.0: Wrong classification + no correct lines
+    - 0.05: Response has parsable JSON but wrong classification and no correct lines
+    - 0.0: No parsable JSON / completely wrong format
     
     Args:
         response: Model's generated response text
@@ -57,16 +64,26 @@ def compute_reward(
     Returns:
         Reward value between 0.0 and 1.0
     """
-    # Parse response
-    classification, predicted_lines = parse_model_response(response)
+    # Parse response - get full result for status check
+    result = parse_model_response_full(response)
+    classification = result.classification
+    predicted_lines = result.vulnerable_lines
     
     # Debug: log first few calls to show exactly what we're parsing
     if _log_first[0]:
         _log_first[0] = False
         print(f"[compute_reward DEBUG] Response length: {len(response)}", flush=True)
         print(f"[compute_reward DEBUG] Response repr: {repr(response[:200])}", flush=True)
+        print(f"[compute_reward DEBUG] Parse status: {result.status}", flush=True)
         print(f"[compute_reward DEBUG] Parsed classification: {classification}", flush=True)
         print(f"[compute_reward DEBUG] Parsed lines: {predicted_lines}", flush=True)
+    
+    # If no parsable classification at all
+    if classification is None:
+        # Check if there's at least valid JSON structure
+        if result.status in ["VALID", "INVALID_CLASSIFICATION"]:
+            return 0.05  # Has JSON but classification is invalid
+        return 0.0  # No JSON at all or incomplete
     
     # Check classification correctness
     expected_class = "VULNERABLE" if is_vulnerable else "NOT_VULNERABLE"
@@ -83,7 +100,7 @@ def compute_reward(
     elif line_accuracy > 0:
         return 0.3
     else:
-        return 0.0
+        return 0.05  # Valid format but wrong classification and no correct lines
 
 
 def batch_compute_rewards(
@@ -188,29 +205,105 @@ def reward_function_for_grpo(completions: List[str], **kwargs) -> List[float]:
     return rewards
 
 
+# =============================================================================
+# veRL-compatible reward function
+# =============================================================================
+
+_verl_call_counter = [0]
+_verl_first_call_logged = [False]
+
+
+def compute_score(data_source: str, solution_str: str, ground_truth: str, extra_info: dict = None) -> float:
+    """
+    veRL-compatible reward function.
+    
+    This is the interface veRL expects for custom reward functions.
+    
+    Args:
+        data_source: Dataset identifier (e.g., "vulnerability_detection")
+        solution_str: Model's generated response text
+        ground_truth: JSON string containing is_vulnerable and ground_truth_lines
+        extra_info: Optional additional metadata
+    
+    Returns:
+        float: Reward value (0.0, 0.05, 0.3, 0.6, or 1.0)
+    """
+    # Parse ground truth
+    try:
+        gt = json.loads(ground_truth)
+        is_vulnerable = gt.get("is_vulnerable", True)
+        gt_lines = gt.get("ground_truth_lines", [])
+    except (json.JSONDecodeError, TypeError):
+        # Fallback if ground truth parsing fails
+        is_vulnerable = True
+        gt_lines = []
+    
+    # Compute reward
+    reward = compute_reward(solution_str, is_vulnerable, gt_lines)
+    
+    # Log completion for debugging
+    _verl_call_counter[0] += 1
+    log_path = get_log_path()
+    
+    # Log first call info
+    if not _verl_first_call_logged[0]:
+        _verl_first_call_logged[0] = True
+        print(f"[veRL compute_score] First call!", flush=True)
+        print(f"[veRL compute_score] GRPO_COMPLETION_LOG = {log_path}", flush=True)
+        print(f"[veRL compute_score] Completion length: {len(solution_str)}", flush=True)
+        print(f"[veRL compute_score] Completion preview: {solution_str[:300]}...", flush=True)
+        print(f"[veRL compute_score] Reward: {reward}", flush=True)
+    
+    # Write to log file if configured
+    if log_path:
+        try:
+            with _completion_log_lock:
+                with open(log_path, 'a', encoding='utf-8') as f:
+                    log_entry = {
+                        "call_num": _verl_call_counter[0],
+                        "timestamp": datetime.now().isoformat(),
+                        "data_source": data_source,
+                        "is_vulnerable": is_vulnerable,
+                        "ground_truth_lines": gt_lines,
+                        "completion_length": len(solution_str) if solution_str else 0,
+                        "completion": solution_str,
+                        "reward": reward,
+                        "extra_info": extra_info,
+                    }
+                    f.write(json_module.dumps(log_entry, ensure_ascii=False) + '\n')
+        except Exception as e:
+            if _verl_call_counter[0] <= 5:  # Only warn first few times
+                print(f"[veRL compute_score] Warning: Failed to log: {e}", flush=True)
+    
+    return reward
+
 
 if __name__ == "__main__":
-    # Test cases
+    # Test cases for tiered reward system
     test_cases = [
-        # Correct classification + correct lines
-        ('{"classification": "VULNERABLE", "vulnerable_lines": [5, 7, 10], "reasoning_summary": "..."}',
+        # Correct classification + correct lines -> 1.0
+        ('<think>analysis</think>{"classification": "VULNERABLE", "vulnerable_lines": [5, 7, 10], "reasoning_summary": "..."}',
          True, [5, 7], 1.0),
         
-        # Correct classification + partial lines  
-        ('{"classification": "VULNERABLE", "vulnerable_lines": [5], "reasoning_summary": "..."}',
-         True, [5, 7, 10], 0.6),  # 33% < 50%
+        # Correct classification + partial lines -> 0.6
+        ('<think>analysis</think>{"classification": "VULNERABLE", "vulnerable_lines": [5], "reasoning_summary": "..."}',
+         True, [5, 7, 10], 0.6),
         
-        # Correct classification, no lines needed
-        ('{"classification": "NOT_VULNERABLE", "vulnerable_lines": [], "reasoning_summary": "..."}',
+        # Correct classification, no lines needed -> 1.0
+        ('<think>analysis</think>{"classification": "NOT_VULNERABLE", "vulnerable_lines": [], "reasoning_summary": "..."}',
          False, [], 1.0),
         
-        # Wrong classification, some lines correct
-        ('{"classification": "NOT_VULNERABLE", "vulnerable_lines": [5, 7], "reasoning_summary": "..."}',
+        # Wrong classification, some lines correct -> 0.3
+        ('<think>analysis</think>{"classification": "NOT_VULNERABLE", "vulnerable_lines": [5, 7], "reasoning_summary": "..."}',
          True, [5, 7, 10], 0.3),
         
-        # Wrong classification, no correct lines
-        ('{"classification": "VULNERABLE", "vulnerable_lines": [1, 2], "reasoning_summary": "..."}',
-         False, [], 0.0),
+        # Wrong classification, no correct lines, but valid JSON -> 0.05
+        ('<think>analysis</think>{"classification": "VULNERABLE", "vulnerable_lines": [1, 2], "reasoning_summary": "..."}',
+         False, [], 0.05),
+        
+        # No JSON, incomplete thinking -> 0.0
+        ('<think>still thinking about VULNERABLE code...',
+         True, [5], 0.0),
     ]
     
     print("Testing reward function:")
@@ -218,3 +311,11 @@ if __name__ == "__main__":
         reward = compute_reward(response, is_vuln, gt_lines)
         status = "✓" if abs(reward - expected) < 0.01 else "✗"
         print(f"  {status} Expected {expected}, got {reward}")
+    
+    # Test veRL compute_score interface
+    print("\nTesting veRL compute_score interface:")
+    ground_truth = json.dumps({"is_vulnerable": True, "ground_truth_lines": [5, 7]})
+    response = '<think>done</think>{"classification": "VULNERABLE", "vulnerable_lines": [5, 7], "reasoning_summary": "test"}'
+    score = compute_score("vulnerability_detection", response, ground_truth)
+    print(f"  Score: {score} (expected 1.0)")
+

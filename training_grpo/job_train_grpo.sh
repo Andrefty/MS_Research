@@ -1,14 +1,15 @@
 #!/bin/bash
-#SBATCH --job-name=grpo-qwen3-4b
+#SBATCH --job-name=verl-grpo
 #SBATCH --gres=gpu:3             # 3 GPUs
 #SBATCH --cpus-per-task=64
 #SBATCH --mem=300G
-#SBATCH --output=logs/grpo_%j.out
-#SBATCH --error=logs/grpo_%j.err
+#SBATCH --output=logs/verl_grpo_%j.out
+#SBATCH --error=logs/verl_grpo_%j.err
+#SBATCH --time=48:00:00
 
 # ============================================
-# GRPO Training Job for Qwen3-4B
-# Runs after SFT to refine with reward-based RL
+# veRL GRPO Training Job for Qwen3-4B
+# Uses apptainer container with veRL docker image
 # ============================================
 
 set -e
@@ -16,80 +17,107 @@ set -e
 # Paths
 WORK_DIR="/export/home/acs/stud/t/tudor.farcasanu/SSL_research"
 TRAIN_DIR="$WORK_DIR/training_grpo"
-SFT_CHECKPOINT="$WORK_DIR/checkpoints/sft_qwen3_4b"  # From SFT phase
-OUTPUT_DIR="$WORK_DIR/checkpoints/grpo_qwen3_4b"
-TRAIN_FILE="$WORK_DIR/training_grpo/sft_dataset_train.jsonl"
+SFT_CHECKPOINT="$WORK_DIR/checkpoints/sft_qwen3_4b"
+OUTPUT_DIR="$WORK_DIR/checkpoints/grpo_qwen3_4b_verl"
+DATA_DIR="$TRAIN_DIR/verl_data"
+
+# veRL docker image via apptainer
+VERL_IMAGE="$HOME/verl_vllm012.latest.sif"
 
 # Create directories
 mkdir -p "$OUTPUT_DIR"
+mkdir -p "$DATA_DIR"
 mkdir -p logs
 
-# Conda environment setup
-# NOTE: Run setup_training_env.sh first to create the environment with GCC 11
-source ~/miniconda3/bin/activate
-conda activate SRI_training_standard_fa_probs2
+echo "==========================================="
+echo "veRL GRPO Training"
+echo "Base Model: $SFT_CHECKPOINT"
+echo "Data Dir: $DATA_DIR"
+echo "Output: $OUTPUT_DIR"
+echo "Image: $VERL_IMAGE"
+echo "==========================================="
 
-# Set GCC for any JIT CUDA compilation (e.g., FlashInfer, custom ops)
-export CC="$CONDA_PREFIX/bin/x86_64-conda-linux-gnu-gcc"
-export CXX="$CONDA_PREFIX/bin/x86_64-conda-linux-gnu-g++"
-export CUDAHOSTCXX="$CONDA_PREFIX/bin/x86_64-conda-linux-gnu-g++"
-echo "Using GCC: $($CC --version | head -1)"
+# Check if veRL image exists
+if [ ! -f "$VERL_IMAGE" ]; then
+    echo "Error: veRL image not found at $VERL_IMAGE"
+    echo "Pull it first with: apptainer pull docker://verlai/verl:vllm012.latest"
+    exit 1
+fi
 
 # Check GPU availability
 echo "Available GPUs:"
 nvidia-smi --query-gpu=index,name,memory.total --format=csv
 
-# Set environment variables
-export MASTER_ADDR=localhost
-export MASTER_PORT=29501
-export NCCL_DEBUG=INFO
-export TOKENIZERS_PARALLELISM=false
-
 # WandB logging
-export WANDB_PROJECT="qwen3-vuln-grpo"
-export WANDB_RUN_NAME="grpo-qwen3-4b-$SLURM_JOB_ID"
+export WANDB_PROJECT="vulnerability_grpo"
+export WANDB_RUN_NAME="qwen3_4b_verl_grpo_$(date +%Y%m%d_%H%M)"
+export WANDB_API_KEY="${WANDB_API_KEY:-}"
 
 # Completion logging for debugging (logs all completions during training)
-export GRPO_COMPLETION_LOG="$OUTPUT_DIR/grpo_completions_debug.jsonl"
+export GRPO_COMPLETION_LOG="$OUTPUT_DIR/verl_completions_debug.jsonl"
 
 # Number of GPUs
 NUM_GPUS=3
 
-echo "=========================================="
-echo "Starting GRPO Training"
-echo "Base Model: $SFT_CHECKPOINT"
-echo "GPUs: $NUM_GPUS"
-echo "Output: $OUTPUT_DIR"
-echo "=========================================="
+# ============================================
+# veRL GRPO Training Configuration
+# ============================================
+# Settings based on:
+# - Qwen3-4B README: Temperature=0.6, TopP=0.95, TopK=20
+# - max_response_length=32768 (recommended output length)
+# - KL divergence disabled (beta=0)
+# - FSDP2 with offload for memory efficiency
+# ============================================
 
-# Run training with DeepSpeed
 cd "$TRAIN_DIR"
 
-# Qwen3 recommended params for thinking mode: Temp=0.6, TopP=0.95, TopK=20, MinP=0
-# NOTE: beta=0.0 means no KL divergence penalty. Recent research (Open-Reasoner-Zero,
-# DAPO, Dr.GRPO) shows KL is not essential for GRPO and excluding it saves memory
-# (no reference model needed) and speeds up training. See TRL docs for details.
-deepspeed --num_gpus=$NUM_GPUS train_grpo.py \
-    --model_name "$SFT_CHECKPOINT" \
-    --train_file "$TRAIN_FILE" \
-    --output_dir "$OUTPUT_DIR" \
-    --max_length 32768 \
-    --max_new_tokens 32768 \
-    --num_train_epochs 1 \
-    --per_device_train_batch_size 1 \
-    --gradient_accumulation_steps 4 \
-    --learning_rate 5e-7 \
-    --num_generations 4 \
-    --temperature 0.6 \
-    --top_p 0.95 \
-    --top_k 20 \
-    --beta 0.0 \
-    --save_steps 100 \
-    --logging_steps 10 \
-    --deepspeed ds_config_zero3.json \
-    --bf16
+apptainer exec --nv \
+    --bind $WORK_DIR:$WORK_DIR \
+    --bind $HOME:$HOME \
+    $VERL_IMAGE \
+    python3 -m verl.trainer.main_ppo \
+    algorithm.adv_estimator=grpo \
+    data.train_files=$DATA_DIR/train.parquet \
+    data.val_files=$DATA_DIR/val.parquet \
+    data.train_batch_size=64 \
+    data.max_prompt_length=28672 \
+    data.max_response_length=32768 \
+    data.truncation=left \
+    data.prompt_key=prompt \
+    actor_rollout_ref.model.path=$SFT_CHECKPOINT \
+    actor_rollout_ref.actor.optim.lr=1e-6 \
+    actor_rollout_ref.model.use_remove_padding=True \
+    actor_rollout_ref.model.enable_gradient_checkpointing=True \
+    actor_rollout_ref.actor.ppo_mini_batch_size=16 \
+    actor_rollout_ref.actor.ppo_micro_batch_size_per_gpu=4 \
+    actor_rollout_ref.actor.use_kl_loss=False \
+    actor_rollout_ref.actor.kl_loss_coef=0.0 \
+    actor_rollout_ref.actor.strategy=fsdp2 \
+    actor_rollout_ref.actor.fsdp_config.param_offload=True \
+    actor_rollout_ref.actor.fsdp_config.optimizer_offload=True \
+    actor_rollout_ref.rollout.name=vllm \
+    actor_rollout_ref.rollout.tensor_model_parallel_size=1 \
+    actor_rollout_ref.rollout.gpu_memory_utilization=0.7 \
+    actor_rollout_ref.rollout.temperature=0.6 \
+    actor_rollout_ref.rollout.top_p=0.95 \
+    actor_rollout_ref.rollout.top_k=20 \
+    actor_rollout_ref.rollout.min_p=0 \
+    actor_rollout_ref.rollout.n=4 \
+    actor_rollout_ref.ref.fsdp_config.param_offload=True \
+    algorithm.use_kl_in_reward=False \
+    custom_reward_function.path=$TRAIN_DIR/reward_function.py \
+    custom_reward_function.name=compute_score \
+    trainer.logger='["console","wandb"]' \
+    trainer.project_name=$WANDB_PROJECT \
+    trainer.experiment_name=$WANDB_RUN_NAME \
+    trainer.default_local_dir=$OUTPUT_DIR \
+    trainer.n_gpus_per_node=$NUM_GPUS \
+    trainer.nnodes=1 \
+    trainer.save_freq=100 \
+    trainer.test_freq=20 \
+    trainer.total_epochs=1
 
-echo "=========================================="
-echo "GRPO Training completed!"
+echo "==========================================="
+echo "veRL GRPO Training completed!"
 echo "Model saved to: $OUTPUT_DIR"
-echo "=========================================="
+echo "==========================================="
