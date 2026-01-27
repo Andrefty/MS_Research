@@ -203,36 +203,69 @@ def parse_model_response(
         json_data if include_raw_json else None
     )
 
+# =============================================================================
+# Configuration: REGEX_FALLBACK handling
+# =============================================================================
+# Default behavior for wrapper functions (can be overridden per-call)
+# Set to True to also accept REGEX_FALLBACK samples (regex-recovered malformed JSON)
+# ALLOW_REGEX_FALLBACK_DEFAULT = True  # Uncomment to include regex-recovered
+ALLOW_REGEX_FALLBACK_DEFAULT = False  # Only VALID responses by default
 
-def parse_for_reward(response_text: str) -> Tuple[Optional[str], List[int]]:
+
+def parse_for_reward(
+    response_text: str,
+    allow_regex_fallback: bool = None  # None = use ALLOW_REGEX_FALLBACK_DEFAULT
+) -> Tuple[Optional[str], List[int]]:
     """
     Simple interface for reward function (backward compatible).
     
+    Args:
+        response_text: Model response text to parse
+        allow_regex_fallback: If True, also accept REGEX_FALLBACK status.
+                              If None, uses ALLOW_REGEX_FALLBACK_DEFAULT.
+    
     Returns:
         (classification, vulnerable_lines) tuple
-        Returns (None, []) for invalid statuses including REGEX_FALLBACK
+        Returns (None, []) for invalid statuses
     """
     result = parse_model_response(response_text)
     
-    # Only return classification for truly VALID parsing
-    # REGEX_FALLBACK means malformed JSON - should not be treated as valid
-    if result.status != "VALID":
+    # Determine valid statuses
+    use_fallback = allow_regex_fallback if allow_regex_fallback is not None else ALLOW_REGEX_FALLBACK_DEFAULT
+    valid_statuses = ["VALID"]
+    if use_fallback:
+        valid_statuses.append("REGEX_FALLBACK")  # Also accept regex-recovered
+    
+    if result.status not in valid_statuses:
         return None, []
     
     return result.classification, result.vulnerable_lines
 
 
-def parse_for_metrics(response_text: str) -> Tuple[Optional[int], Optional[List[int]]]:
+def parse_for_metrics(
+    response_text: str,
+    allow_regex_fallback: bool = None  # None = use ALLOW_REGEX_FALLBACK_DEFAULT
+) -> Tuple[Optional[int], Optional[List[int]]]:
     """
     Interface for compute_metrics.py (backward compatible).
+    
+    Args:
+        response_text: Model response text to parse
+        allow_regex_fallback: If True, also accept REGEX_FALLBACK status.
+                              If None, uses ALLOW_REGEX_FALLBACK_DEFAULT.
     
     Returns:
         (prediction, vulnerable_lines) where prediction is 0, 1, or None
     """
     result = parse_model_response(response_text)
     
-    # Only return prediction for truly VALID parsing
-    if result.status != "VALID":
+    # Determine valid statuses
+    use_fallback = allow_regex_fallback if allow_regex_fallback is not None else ALLOW_REGEX_FALLBACK_DEFAULT
+    valid_statuses = ["VALID"]
+    if use_fallback:
+        valid_statuses.append("REGEX_FALLBACK")  # Also accept regex-recovered
+    
+    if result.status not in valid_statuses:
         return None, None
     
     if result.classification is None:

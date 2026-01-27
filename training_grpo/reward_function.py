@@ -19,6 +19,14 @@ from typing import Tuple, List, Optional
 from utils.response_parser import parse_model_response as parse_model_response_full
 
 
+# =============================================================================
+# Configuration: REGEX_FALLBACK handling
+# =============================================================================
+# Set to True to also accept REGEX_FALLBACK samples (regex-recovered malformed JSON)
+# ALLOW_REGEX_FALLBACK = True  # Uncomment to include regex-recovered responses
+ALLOW_REGEX_FALLBACK = False  # Only VALID JSON gets full rewards
+
+
 
 def compute_line_accuracy(predicted_lines: List[int], ground_truth_lines: List[int]) -> float:
     """
@@ -61,7 +69,7 @@ def compute_reward(
         ground_truth_lines: List of line numbers that are vulnerable
         
     Returns:
-        Reward value between 0.0 and 1.0
+        Tuple of (reward_value, parse_status) where reward is between 0.0 and 1.0
     """
     # Parse response - get full result for status check
     result = parse_model_response_full(response)
@@ -79,14 +87,18 @@ def compute_reward(
     
     # FIRST: Check if response is VALID JSON
     # Only truly valid JSON responses deserve rewards
-    # REGEX_FALLBACK = malformed JSON that was regex-recovered, should NOT be rewarded
-    if result.status not in ["VALID", "INVALID_CLASSIFICATION"]:
-        return 0.0  # No valid JSON (REGEX_FALLBACK, INCOMPLETE, NO_JSON, etc.)
+    # REGEX_FALLBACK = malformed JSON that was regex-recovered
+    valid_statuses = ["VALID", "INVALID_CLASSIFICATION"]
+    if ALLOW_REGEX_FALLBACK:
+        valid_statuses.append("REGEX_FALLBACK")  # Also accept regex-recovered
+    
+    if result.status not in valid_statuses:
+        return 0.0, result.status  # No valid JSON (INCOMPLETE, NO_JSON, etc.)
     
     # SECOND: Check if classification was parsed
     if classification is None:
         # INVALID_CLASSIFICATION: valid JSON but classification string is invalid
-        return 0.05  # Partial credit for following format but wrong classification value
+        return 0.05, result.status  # Partial credit for following format but wrong classification value
     
     # From here: we have VALID status with a valid classification
     # Check classification correctness
@@ -98,13 +110,13 @@ def compute_reward(
     
     # Compute reward based on tier
     if correct_classification and line_accuracy >= 0.5:
-        return 1.0
+        return 1.0, result.status
     elif correct_classification:
-        return 0.6
+        return 0.6, result.status
     elif line_accuracy > 0:
-        return 0.3
+        return 0.3, result.status
     else:
-        return 0.05  # Valid format but wrong classification and no correct lines
+        return 0.05, result.status  # Valid format but wrong classification and no correct lines
 
 
 def batch_compute_rewards(
@@ -124,7 +136,7 @@ def batch_compute_rewards(
         List of reward values
     """
     return [
-        compute_reward(resp, is_vuln, gt_lines)
+        compute_reward(resp, is_vuln, gt_lines)[0]  # [0] to get just the reward
         for resp, is_vuln, gt_lines in zip(responses, is_vulnerable_list, ground_truth_lines_list)
     ]
 
@@ -242,8 +254,8 @@ def compute_score(data_source: str, solution_str: str, ground_truth: str, extra_
         is_vulnerable = True
         gt_lines = []
     
-    # Compute reward
-    reward = compute_reward(solution_str, is_vulnerable, gt_lines)
+    # Compute reward (returns both reward and parse status)
+    reward, parse_status = compute_reward(solution_str, is_vulnerable, gt_lines)
     
     # Log completion for debugging
     _verl_call_counter[0] += 1
@@ -266,6 +278,7 @@ def compute_score(data_source: str, solution_str: str, ground_truth: str, extra_
                     # Convert numpy types to native Python types for JSON serialization
                     safe_gt_lines = [int(x) for x in gt_lines] if gt_lines else []
                     safe_reward = float(reward)
+                    
                     log_entry = {
                         "call_num": _verl_call_counter[0],
                         "timestamp": datetime.now().isoformat(),
@@ -274,6 +287,7 @@ def compute_score(data_source: str, solution_str: str, ground_truth: str, extra_
                         "ground_truth_lines": safe_gt_lines,
                         "completion_length": len(solution_str) if solution_str else 0,
                         "completion": solution_str,
+                        "parse_status": parse_status,  # NEW: Track parsing status
                         "reward": safe_reward,
                         "extra_info": str(extra_info) if extra_info else None,
                     }
@@ -315,9 +329,9 @@ if __name__ == "__main__":
     
     print("Testing reward function:")
     for response, is_vuln, gt_lines, expected in test_cases:
-        reward = compute_reward(response, is_vuln, gt_lines)
+        reward, parse_status = compute_reward(response, is_vuln, gt_lines)
         status = "✓" if abs(reward - expected) < 0.01 else "✗"
-        print(f"  {status} Expected {expected}, got {reward}")
+        print(f"  {status} Expected {expected}, got {reward} (status: {parse_status})")
     
     # Test veRL compute_score interface
     print("\nTesting veRL compute_score interface:")
