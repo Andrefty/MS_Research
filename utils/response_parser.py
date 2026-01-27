@@ -39,14 +39,18 @@ def extract_json_from_response(response_text: str) -> Optional[dict]:
     - Multiple JSON objects (returns the one with "classification")
     
     Returns the parsed dict or None if no valid JSON found.
+    Returns a dict with '_regex_fallback': True if regex extraction was used.
     """
     if not response_text:
         return None
     
-    # Remove thinking block if present
-    text = response_text
-    if "</think>" in text:
-        text = text.split("</think>", 1)[1].strip()
+    # Require thinking block end for reasoning models
+    # Without </think>, the model is still thinking or output is incomplete
+    if "</think>" not in response_text:
+        return None  # Incomplete response - let caller handle
+    
+    # Extract text after thinking block
+    text = response_text.split("</think>", 1)[1].strip()
     
     # Use Python's built-in JSON decoder with raw_decode
     # This properly handles all JSON edge cases including nested braces in strings
@@ -77,10 +81,11 @@ def extract_json_from_response(response_text: str) -> Optional[dict]:
     if json_objects:
         return json_objects[0]
     
-    # Fallback: Try regex extraction for severely malformed responses
+    # Fallback: Try regex extraction for truncated/malformed JSON
+    # Only runs after </think> is confirmed present
     class_match = re.search(
         r'"classification"\s*:\s*"([^"]+)"',
-        response_text,
+        text,
         re.IGNORECASE
     )
     if class_match:
@@ -89,7 +94,7 @@ def extract_json_from_response(response_text: str) -> Optional[dict]:
         # Try to find vulnerable_lines
         lines_match = re.search(
             r'"vulnerable_lines"\s*:\s*\[([\d,\s]*)\]',
-            response_text
+            text
         )
         lines = []
         if lines_match:
@@ -99,7 +104,8 @@ def extract_json_from_response(response_text: str) -> Optional[dict]:
         return {
             'classification': classification,
             'vulnerable_lines': lines,
-            'reasoning_summary': '[extracted via regex fallback]'
+            'reasoning_summary': '[extracted via regex fallback]',
+            '_regex_fallback': True  # Mark as regex-extracted for status tracking
         }
     
     return None
@@ -155,17 +161,12 @@ def parse_model_response(
     json_data = extract_json_from_response(response_text)
     
     if json_data is None:
-        # No JSON found - check for keywords as last resort
-        # BUT only if model finished thinking (has </think> tag)
-        # Otherwise the model was stuck/truncated mid-thinking
+        # No JSON found and </think> was present (checked in extract_json_from_response)
+        # If extract returned None, either no </think> (incomplete) or no valid content
         has_think_end = '</think>' in response_text.lower()
         
         if has_think_end:
-            response_upper = response_text.upper()
-            if 'NOT_VULNERABLE' in response_upper or 'NOT VULNERABLE' in response_upper:
-                return ParseResult('NOT_VULNERABLE', [], "KEYWORD_ONLY", None)
-            elif 'VULNERABLE' in response_upper:
-                return ParseResult('VULNERABLE', [], "KEYWORD_ONLY", None)
+            # Model finished thinking but produced no valid JSON
             return ParseResult(None, [], "NO_JSON", None)
         else:
             # Model didn't finish thinking - incomplete response
@@ -192,10 +193,13 @@ def parse_model_response(
             elif isinstance(item, str) and item.isdigit():
                 vulnerable_lines.append(int(item))
     
+    # Determine status - VALID for clean JSON, REGEX_FALLBACK for regex-extracted
+    status = "REGEX_FALLBACK" if json_data.get('_regex_fallback') else "VALID"
+    
     return ParseResult(
         classification,
         vulnerable_lines,
-        "VALID",
+        status,
         json_data if include_raw_json else None
     )
 
@@ -206,8 +210,15 @@ def parse_for_reward(response_text: str) -> Tuple[Optional[str], List[int]]:
     
     Returns:
         (classification, vulnerable_lines) tuple
+        Returns (None, []) for invalid statuses including REGEX_FALLBACK
     """
     result = parse_model_response(response_text)
+    
+    # Only return classification for truly VALID parsing
+    # REGEX_FALLBACK means malformed JSON - should not be treated as valid
+    if result.status != "VALID":
+        return None, []
+    
     return result.classification, result.vulnerable_lines
 
 
@@ -219,6 +230,10 @@ def parse_for_metrics(response_text: str) -> Tuple[Optional[int], Optional[List[
         (prediction, vulnerable_lines) where prediction is 0, 1, or None
     """
     result = parse_model_response(response_text)
+    
+    # Only return prediction for truly VALID parsing
+    if result.status != "VALID":
+        return None, None
     
     if result.classification is None:
         return None, None
@@ -236,7 +251,7 @@ def get_classification_and_lines(response_text: str) -> Tuple[Optional[str], Lis
 if __name__ == "__main__":
     # Test cases
     test_cases = [
-        # Standard valid JSON
+        # Standard valid JSON with </think>
         (
             '<think>Analysis...</think>\n{"classification": "VULNERABLE", "vulnerable_lines": [57], "reasoning_summary": "Buffer overflow"}',
             "VULNERABLE", [57], "VALID"
@@ -246,15 +261,20 @@ if __name__ == "__main__":
             '<think>...</think>\n{"classification": "VULNERABLE", "vulnerable_lines": [57], "reasoning_summary": "tensor shape {N, num_updates / N}"}',
             "VULNERABLE", [57], "VALID"
         ),
-        # NOT_VULNERABLE
+        # NOT_VULNERABLE with </think>
         (
-            '{"classification": "NOT_VULNERABLE", "vulnerable_lines": [], "reasoning_summary": "Safe code"}',
+            '<think>Safe code analysis</think>\n{"classification": "NOT_VULNERABLE", "vulnerable_lines": [], "reasoning_summary": "Safe code"}',
             "NOT_VULNERABLE", [], "VALID"
         ),
-        # No JSON but has keyword
+        # No JSON after </think> - returns NO_JSON (keyword fallback removed)
         (
             '<think>The code is VULNERABLE because...</think>',
-            "VULNERABLE", [], "KEYWORD_ONLY"
+            None, [], "NO_JSON"
+        ),
+        # No </think> tag - returns INCOMPLETE (now required)
+        (
+            '{"classification": "NOT_VULNERABLE", "vulnerable_lines": []}',
+            None, [], "INCOMPLETE"
         ),
         # Empty
         ("", None, [], "EMPTY"),

@@ -73,6 +73,8 @@ def analyze_responses(input_file: str, prompt_type_filter: str = None):
             results["parse_status_counts"][status] += 1
             results["by_prompt_type"][prompt_type]["parse_status"][status] += 1
             
+            # Only count truly VALID as successfully parsed
+            # REGEX_FALLBACK indicates malformed JSON - not counted
             if status == "VALID":
                 results["by_prompt_type"][prompt_type]["valid"] += 1
                 results["classification_counts"][classification] += 1
@@ -184,7 +186,8 @@ def main():
                 response = data.get('response', '')
                 classification, lines, status = parse_model_response(response)
                 
-                # Extract if not VALID and not SKIPPED
+                # Extract if not successfully parsed (VALID) and not SKIPPED
+                # REGEX_FALLBACK is included since it means malformed JSON
                 if status not in ["VALID", "SKIPPED"]:
                     broken_samples.append({
                         "commit_id": data.get('commit_id', ''),

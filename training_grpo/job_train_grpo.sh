@@ -106,6 +106,7 @@ apptainer exec --nv \
             actor_rollout_ref.actor.fsdp_config.optimizer_offload=True \
             actor_rollout_ref.actor.fsdp_config.model_dtype=bf16 \
             actor_rollout_ref.rollout.name=vllm \
+            actor_rollout_ref.rollout.load_format=dtensor \
             actor_rollout_ref.rollout.dtype=bfloat16 \
             actor_rollout_ref.rollout.tensor_model_parallel_size=1 \
             actor_rollout_ref.rollout.gpu_memory_utilization=0.7 \

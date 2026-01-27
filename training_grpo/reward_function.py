@@ -16,7 +16,6 @@ import json
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from typing import Tuple, List, Optional
-from utils.response_parser import parse_for_reward as parse_model_response
 from utils.response_parser import parse_model_response as parse_model_response_full
 
 
@@ -53,8 +52,8 @@ def compute_reward(
     - 1.0: Correct classification + ≥50% vulnerable lines correct
     - 0.6: Correct classification only
     - 0.3: Some correct lines but wrong classification
-    - 0.05: Response has parsable JSON but wrong classification and no correct lines
-    - 0.0: No parsable JSON / completely wrong format
+    - 0.05: Response has valid JSON but wrong classification and no correct lines
+    - 0.0: No valid JSON / completely wrong format
     
     Args:
         response: Model's generated response text
@@ -78,13 +77,18 @@ def compute_reward(
         print(f"[compute_reward DEBUG] Parsed classification: {classification}", flush=True)
         print(f"[compute_reward DEBUG] Parsed lines: {predicted_lines}", flush=True)
     
-    # If no parsable classification at all
-    if classification is None:
-        # Check if there's at least valid JSON structure
-        if result.status in ["VALID", "INVALID_CLASSIFICATION"]:
-            return 0.05  # Has JSON but classification is invalid
-        return 0.0  # No JSON at all or incomplete
+    # FIRST: Check if response is VALID JSON
+    # Only truly valid JSON responses deserve rewards
+    # REGEX_FALLBACK = malformed JSON that was regex-recovered, should NOT be rewarded
+    if result.status not in ["VALID", "INVALID_CLASSIFICATION"]:
+        return 0.0  # No valid JSON (REGEX_FALLBACK, INCOMPLETE, NO_JSON, etc.)
     
+    # SECOND: Check if classification was parsed
+    if classification is None:
+        # INVALID_CLASSIFICATION: valid JSON but classification string is invalid
+        return 0.05  # Partial credit for following format but wrong classification value
+    
+    # From here: we have VALID status with a valid classification
     # Check classification correctness
     expected_class = "VULNERABLE" if is_vulnerable else "NOT_VULNERABLE"
     correct_classification = (classification == expected_class)
