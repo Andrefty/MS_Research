@@ -259,16 +259,19 @@ def compute_score(data_source: str, solution_str: str, ground_truth: str, extra_
         try:
             with _completion_log_lock:
                 with open(log_path, 'a', encoding='utf-8') as f:
+                    # Convert numpy types to native Python types for JSON serialization
+                    safe_gt_lines = [int(x) for x in gt_lines] if gt_lines else []
+                    safe_reward = float(reward)
                     log_entry = {
                         "call_num": _verl_call_counter[0],
                         "timestamp": datetime.now().isoformat(),
                         "data_source": data_source,
-                        "is_vulnerable": is_vulnerable,
-                        "ground_truth_lines": gt_lines,
+                        "is_vulnerable": bool(is_vulnerable),
+                        "ground_truth_lines": safe_gt_lines,
                         "completion_length": len(solution_str) if solution_str else 0,
                         "completion": solution_str,
-                        "reward": reward,
-                        "extra_info": extra_info,
+                        "reward": safe_reward,
+                        "extra_info": str(extra_info) if extra_info else None,
                     }
                     f.write(json_module.dumps(log_entry, ensure_ascii=False) + '\n')
         except Exception as e:
