@@ -19,13 +19,15 @@ TRAIN_DIR="$WORK_DIR/training_grpo"
 SFT_CHECKPOINT="$WORK_DIR/checkpoints/sft_qwen3_4b"
 OUTPUT_DIR="$WORK_DIR/checkpoints/grpo_qwen3_4b_verl"
 DATA_DIR="$TRAIN_DIR/verl_data"
+RAY_TEMP_DIR="/tmp/ray_$(whoami)" # Avoid conflict with other users' ray sessions
 
 # veRL docker image via apptainer
-VERL_IMAGE="$WORK_DIR/verl_vllm012.latest.sif"
+VERL_IMAGE="$WORK_DIR/verl_vllm012_updated.sif"
 
 # Create directories
 mkdir -p "$OUTPUT_DIR"
 mkdir -p "$DATA_DIR"
+mkdir -p "$RAY_TEMP_DIR"
 mkdir -p logs
 
 echo "==========================================="
@@ -73,17 +75,15 @@ unset ROCR_VISIBLE_DEVICES
 
 cd "$TRAIN_DIR"
 
-# Install veRL (not included in base image) and run training
-# --writable-tmpfs allows pip install in read-only container
+# --writable-tmpfs allows temporary writes in read-only container
+# Note: Using updated container with transformers 4.57.6 and verl pre-installed
 apptainer exec --nv \
     --writable-tmpfs \
+    --env RAY_TMPDIR=$RAY_TEMP_DIR \
     --bind $WORK_DIR:$WORK_DIR \
     --bind $HOME:$HOME \
     $VERL_IMAGE \
     bash -c "
-        echo 'Installing veRL...'
-        pip install verl --no-deps && \
-        echo 'veRL installed successfully!' && \
         python3 -m verl.trainer.main_ppo \
             algorithm.adv_estimator=grpo \
             data.train_files=$DATA_DIR/train.parquet \
@@ -106,7 +106,7 @@ apptainer exec --nv \
             actor_rollout_ref.actor.fsdp_config.optimizer_offload=True \
             actor_rollout_ref.actor.fsdp_config.model_dtype=bf16 \
             actor_rollout_ref.rollout.name=vllm \
-            actor_rollout_ref.rollout.load_format=dtensor \
+            actor_rollout_ref.rollout.load_format=auto \
             actor_rollout_ref.rollout.dtype=bfloat16 \
             actor_rollout_ref.rollout.tensor_model_parallel_size=1 \
             actor_rollout_ref.rollout.gpu_memory_utilization=0.7 \
