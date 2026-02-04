@@ -89,14 +89,15 @@ apptainer exec --nv \
             data.train_files=$DATA_DIR/train.parquet \
             data.val_files=$DATA_DIR/val.parquet \
             data.train_batch_size=60 \
-            data.max_prompt_length=28672 \
-            data.max_response_length=32768 \
-            data.truncation=left \
-            data.prompt_key=prompt \
+            data.max_prompt_length=28681 \
+            data.max_response_length=12279 \
+            data.filter_overlong_prompts=True \
+            data.truncation=middle \
             actor_rollout_ref.model.path=$SFT_CHECKPOINT \
             actor_rollout_ref.actor.optim.lr=1e-6 \
             actor_rollout_ref.model.use_remove_padding=True \
             actor_rollout_ref.model.enable_gradient_checkpointing=True \
+            actor_rollout_ref.model.enable_activation_offload=True \
             actor_rollout_ref.actor.ppo_mini_batch_size=12 \
             actor_rollout_ref.actor.ppo_micro_batch_size_per_gpu=1 \
             actor_rollout_ref.actor.use_kl_loss=False \
@@ -121,6 +122,7 @@ apptainer exec --nv \
             actor_rollout_ref.ref.fsdp_config.param_offload=True \
             actor_rollout_ref.ref.log_prob_micro_batch_size_per_gpu=2 \
             actor_rollout_ref.ref.fsdp_config.model_dtype=bf16 \
+            actor_rollout_ref.ref.strategy=fsdp2 \
             algorithm.use_kl_in_reward=False \
             custom_reward_function.path=$TRAIN_DIR/reward_function.py \
             custom_reward_function.name=compute_score \
@@ -129,6 +131,7 @@ apptainer exec --nv \
             trainer.experiment_name=$WANDB_RUN_NAME \
             trainer.default_local_dir=$OUTPUT_DIR \
             trainer.n_gpus_per_node=$NUM_GPUS \
+            trainer.resume_mode=auto \
             trainer.nnodes=1 \
             trainer.save_freq=100 \
             trainer.test_freq=20 \

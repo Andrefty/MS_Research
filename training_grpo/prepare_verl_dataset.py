@@ -82,7 +82,7 @@ def flatten_for_parquet(sample: dict) -> dict:
     """
     return {
         "data_source": sample["data_source"],
-        "prompt": json.dumps(sample["prompt"]),  # JSON string for message list
+        "prompt": sample["prompt"],  # Keep as list of dicts, NOT JSON string! veRL expects this.
         "ability": sample["ability"],
         "reward_model": sample["reward_model"],  # Keep as dict, veRL expects ["ground_truth"]
         "extra_info": sample["extra_info"]  # Keep as dict, veRL expects .get() to work
