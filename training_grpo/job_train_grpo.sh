@@ -22,7 +22,7 @@ DATA_DIR="$TRAIN_DIR/verl_data"
 RAY_TEMP_DIR="/tmp/ray_$(whoami)" # Avoid conflict with other users' ray sessions
 
 # veRL docker image via apptainer
-VERL_IMAGE="$WORK_DIR/verl_vllm012.latest.sif"
+VERL_IMAGE="$WORK_DIR/verl_vllm012_updated.sif"
 
 # Create directories
 mkdir -p "$OUTPUT_DIR"
@@ -75,8 +75,8 @@ unset ROCR_VISIBLE_DEVICES
 
 cd "$TRAIN_DIR"
 
-# Install veRL (not included in base image) and run training
-# --writable-tmpfs allows pip install in read-only container
+# --writable-tmpfs allows temporary writes in read-only container
+# Note: Using updated container with transformers 4.57.6 and verl pre-installed
 apptainer exec --nv \
     --writable-tmpfs \
     --env RAY_TMPDIR=$RAY_TEMP_DIR \
@@ -90,9 +90,6 @@ apptainer exec --nv \
     --bind $HOME:$HOME \
     $VERL_IMAGE \
     bash -c "
-        echo 'Installing veRL...'
-        pip install verl --no-deps && \
-        echo 'veRL installed successfully!' && \
         python3 -m verl.trainer.main_ppo \
             algorithm.adv_estimator=grpo \
             data.train_files=$DATA_DIR/train.parquet \
