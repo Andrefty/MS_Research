@@ -19,6 +19,7 @@ TRAIN_DIR="$WORK_DIR/training_grpo"
 SFT_CHECKPOINT="$WORK_DIR/checkpoints/sft_qwen3_4b"
 OUTPUT_DIR="$WORK_DIR/checkpoints/grpo_qwen3_4b_verl"
 DATA_DIR="$TRAIN_DIR/verl_data"
+RAY_TEMP_DIR="/tmp/ray_$(whoami)" # Avoid conflict with other users' ray sessions
 
 # veRL docker image via apptainer
 VERL_IMAGE="$WORK_DIR/verl_vllm012.latest.sif"
@@ -26,6 +27,7 @@ VERL_IMAGE="$WORK_DIR/verl_vllm012.latest.sif"
 # Create directories
 mkdir -p "$OUTPUT_DIR"
 mkdir -p "$DATA_DIR"
+mkdir -p "$RAY_TEMP_DIR"
 mkdir -p logs
 
 echo "==========================================="
@@ -77,6 +79,13 @@ cd "$TRAIN_DIR"
 # --writable-tmpfs allows pip install in read-only container
 apptainer exec --nv \
     --writable-tmpfs \
+    --env RAY_TMPDIR=$RAY_TEMP_DIR \
+    --env OMP_NUM_THREADS=1 \
+    --env MKL_NUM_THREADS=1 \
+    --env OPENBLAS_NUM_THREADS=1 \
+    --env VECLIB_MAXIMUM_THREADS=1 \
+    --env NUMEXPR_NUM_THREADS=1 \
+    --env RAY_NUM_CPUS=64 \
     --bind $WORK_DIR:$WORK_DIR \
     --bind $HOME:$HOME \
     $VERL_IMAGE \
@@ -106,7 +115,7 @@ apptainer exec --nv \
             actor_rollout_ref.actor.fsdp_config.optimizer_offload=True \
             actor_rollout_ref.actor.fsdp_config.model_dtype=bf16 \
             actor_rollout_ref.rollout.name=vllm \
-            actor_rollout_ref.rollout.load_format=dtensor \
+            actor_rollout_ref.rollout.load_format=auto \
             actor_rollout_ref.rollout.dtype=bfloat16 \
             actor_rollout_ref.rollout.tensor_model_parallel_size=1 \
             actor_rollout_ref.rollout.gpu_memory_utilization=0.7 \
@@ -132,6 +141,7 @@ apptainer exec --nv \
             trainer.nnodes=1 \
             trainer.save_freq=100 \
             trainer.test_freq=20 \
+            ray_kwargs.ray_init.num_cpus=64 \
             trainer.total_epochs=1
     "
 
