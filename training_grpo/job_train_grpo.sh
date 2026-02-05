@@ -2,7 +2,7 @@
 #SBATCH --job-name=verl-grpo
 #SBATCH --gres=gpu:3             # 3 GPUs
 #SBATCH --cpus-per-task=64
-#SBATCH --mem=500G
+#SBATCH --mem=380G               # Max: 382G (dgxh100), 430G (dgxa100) with 32 CPUs
 #SBATCH --output=logs/verl_grpo_%j.out
 #SBATCH --error=logs/verl_grpo_%j.err
 
