@@ -120,6 +120,7 @@ print('Successfully merged FSDP checkpoint to HF format!')
         
         if [[ $? -eq 0 ]]; then
             echo "Successfully merged FSDP checkpoint to HF format!"
+            conda deactivate
         else
             echo "ERROR: Failed to merge FSDP checkpoint" >&2
             exit 1
