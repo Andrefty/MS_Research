@@ -2,7 +2,7 @@
 #SBATCH --job-name=verl-grpo
 #SBATCH --gres=gpu:3             # 3 GPUs
 #SBATCH --cpus-per-task=64
-#SBATCH --mem=380G               # Max: 382G (dgxh100), 430G (dgxa100) with 32 CPUs
+#SBATCH --mem=300G               # Max: 382G (dgxh100), 430G (dgxa100) with 32 CPUs
 #SBATCH --output=logs/verl_grpo_%j.out
 #SBATCH --error=logs/verl_grpo_%j.err
 
@@ -101,7 +101,9 @@ python -m verl.trainer.main_ppo \
     actor_rollout_ref.rollout.load_format=auto \
     actor_rollout_ref.rollout.dtype=bfloat16 \
     actor_rollout_ref.rollout.tensor_model_parallel_size=1 \
-    actor_rollout_ref.rollout.gpu_memory_utilization=0.7 \
+    actor_rollout_ref.rollout.gpu_memory_utilization=0.88 \
+    actor_rollout_ref.rollout.max_num_batched_tokens=40960 \
+    actor_rollout_ref.rollout.enable_chunked_prefill=True \
     actor_rollout_ref.rollout.temperature=0.6 \
     actor_rollout_ref.rollout.top_p=0.95 \
     actor_rollout_ref.rollout.top_k=20 \

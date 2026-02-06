@@ -108,7 +108,7 @@ from verl.model_merger.base_model_merger import ModelMergerConfig
 
 config = ModelMergerConfig(
     operation='merge',
-    backend='fsdp',
+    backend='fsdp2',
     local_dir='$FSDP_ACTOR_DIR',
     target_dir='$MODEL_PATH',
     hf_model_config_path='$FSDP_ACTOR_DIR/huggingface',
