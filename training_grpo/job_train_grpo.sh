@@ -63,6 +63,14 @@ export RAY_TMPDIR=$RAY_TEMP_DIR
 # Unset ROCR_VISIBLE_DEVICES to avoid conflict with CUDA_VISIBLE_DEVICES in veRL
 unset ROCR_VISIBLE_DEVICES
 
+# Limit threading to prevent oversubscription (Ray handles parallelism at process level)
+export OMP_NUM_THREADS=1
+export MKL_NUM_THREADS=1
+export OPENBLAS_NUM_THREADS=1
+export VECLIB_MAXIMUM_THREADS=1
+export NUMEXPR_NUM_THREADS=1
+export RAY_NUM_CPUS=64
+
 # ============================================
 # veRL GRPO Training Configuration
 # ============================================
@@ -128,6 +136,7 @@ python -m verl.trainer.main_ppo \
     trainer.nnodes=1 \
     trainer.save_freq=100 \
     trainer.test_freq=20 \
+    ray_kwargs.ray_init.num_cpus=64 \
     trainer.total_epochs=1
 
 echo "==========================================="
