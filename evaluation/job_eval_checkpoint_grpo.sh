@@ -81,24 +81,44 @@ echo "========================================"
 
 # --- Merge veRL checkpoint if needed ---
 # veRL saves FSDP sharded checkpoints that need to be merged to HF format for inference
-if [[ "$MODEL_NAME" == *"verl"* ]] && [[ ! -f "$MODEL_PATH/config.json" ]]; then
+# Check for both single model file and sharded format (model-00001-of-*.safetensors)
+HAS_MODEL_WEIGHTS=false
+if [[ -f "$MODEL_PATH/model.safetensors" ]] || [[ -f "$MODEL_PATH/pytorch_model.bin" ]]; then
+    HAS_MODEL_WEIGHTS=true
+elif ls "$MODEL_PATH"/model-00001-of-*.safetensors 1> /dev/null 2>&1; then
+    HAS_MODEL_WEIGHTS=true
+elif ls "$MODEL_PATH"/pytorch_model-00001-of-*.bin 1> /dev/null 2>&1; then
+    HAS_MODEL_WEIGHTS=true
+fi
+
+if [[ "$MODEL_NAME" == *"verl"* ]] && [[ "$HAS_MODEL_WEIGHTS" == "false" ]]; then
     echo ""
-    echo "veRL checkpoint detected but HF model not found at: $MODEL_PATH"
+    echo "veRL checkpoint detected but HF model weights not found at: $MODEL_PATH"
     echo "Attempting to merge FSDP checkpoint..."
     
     FSDP_ACTOR_DIR="$VERL_CKPT_DIR/global_step_${LATEST_STEP}/actor"
     if [[ -d "$FSDP_ACTOR_DIR" ]]; then
-        # Use veRL's model merger to convert FSDP checkpoint to HF format
-        # This runs inside the veRL container
-        apptainer exec --nv \
-            --bind "$WORK_DIR:$WORK_DIR" \
-            "$WORK_DIR/verl_vllm012.latest.sif" \
-            python3 -m verl.model_merger merge \
-                --backend fsdp \
-                --local_dir "$FSDP_ACTOR_DIR" \
-                --target_dir "$MODEL_PATH"
+        # Use veRL's model merger from conda environment
+        source ~/miniconda3/etc/profile.d/conda.sh
+        conda activate verl_env
         
-        if [[ $? -eq 0 ]] && [[ -f "$MODEL_PATH/config.json" ]]; then
+        python -c "
+from verl.model_merger.fsdp_model_merger import FSDPModelMerger
+from verl.model_merger.base_model_merger import ModelMergerConfig
+
+config = ModelMergerConfig(
+    operation='merge',
+    backend='fsdp',
+    local_dir='$FSDP_ACTOR_DIR',
+    target_dir='$MODEL_PATH',
+    hf_model_config_path='$FSDP_ACTOR_DIR/huggingface',
+)
+merger = FSDPModelMerger(config)
+merger.merge_and_save()
+print('Successfully merged FSDP checkpoint to HF format!')
+"
+        
+        if [[ $? -eq 0 ]]; then
             echo "Successfully merged FSDP checkpoint to HF format!"
         else
             echo "ERROR: Failed to merge FSDP checkpoint" >&2
@@ -108,6 +128,8 @@ if [[ "$MODEL_NAME" == *"verl"* ]] && [[ ! -f "$MODEL_PATH/config.json" ]]; then
         echo "ERROR: FSDP checkpoint directory not found: $FSDP_ACTOR_DIR" >&2
         exit 1
     fi
+else
+    echo "Model weights already exist at: $MODEL_PATH"
 fi
 
 SGLANG_PID=""
