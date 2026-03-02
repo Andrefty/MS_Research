@@ -63,6 +63,9 @@ export RAY_TMPDIR=$RAY_TEMP_DIR
 # Unset ROCR_VISIBLE_DEVICES to avoid conflict with CUDA_VISIBLE_DEVICES in veRL
 unset ROCR_VISIBLE_DEVICES
 
+# Enable DeepGEMM optimized FP8 kernels for H100
+export VLLM_USE_DEEP_GEMM=1
+
 # ============================================
 # veRL GRPO Training Configuration
 # ============================================
@@ -117,6 +120,9 @@ python -m verl.trainer.main_ppo \
     actor_rollout_ref.rollout.gpu_memory_utilization=0.9 \
     actor_rollout_ref.rollout.max_num_batched_tokens=41960 \
     actor_rollout_ref.rollout.max_num_seqs=64 \
+    +actor_rollout_ref.rollout.quantization=fp8 \
+    algorithm.rollout_correction.rollout_is=token \
+    algorithm.rollout_correction.rollout_is_threshold=2.0 \
     actor_rollout_ref.rollout.enable_chunked_prefill=True \
     actor_rollout_ref.rollout.temperature=0.6 \
     actor_rollout_ref.rollout.top_p=0.95 \
