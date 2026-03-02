@@ -2,7 +2,7 @@
 #SBATCH --job-name=verl-grpo
 #SBATCH --gres=gpu:3             # 3 GPUs
 #SBATCH --cpus-per-task=64
-#SBATCH --mem=300G               # Max: 382G (dgxh100), 430G (dgxa100) with 32 CPUs
+#SBATCH --mem=128G               # Max: 382G (dgxh100), 430G (dgxa100) with 32 CPUs
 #SBATCH --output=logs/verl_grpo_%j.out
 #SBATCH --error=logs/verl_grpo_%j.err
 
@@ -63,14 +63,6 @@ export RAY_TMPDIR=$RAY_TEMP_DIR
 # Unset ROCR_VISIBLE_DEVICES to avoid conflict with CUDA_VISIBLE_DEVICES in veRL
 unset ROCR_VISIBLE_DEVICES
 
-# Limit threading to prevent oversubscription (Ray handles parallelism at process level)
-export OMP_NUM_THREADS=1
-export MKL_NUM_THREADS=1
-export OPENBLAS_NUM_THREADS=1
-export VECLIB_MAXIMUM_THREADS=1
-export NUMEXPR_NUM_THREADS=1
-export RAY_NUM_CPUS=64
-
 # ============================================
 # veRL GRPO Training Configuration
 # ============================================
@@ -80,6 +72,19 @@ export RAY_NUM_CPUS=64
 # - KL divergence disabled (beta=0)
 # - FSDP2 with offload for memory efficiency
 # ============================================
+# actor_rollout_ref.rollout.enable_prefix_caching=False \ - this doesn't do anything because verl seems to ignore disabling things set to false:
+#     +actor_rollout_ref.rollout.engine_kwargs.vllm.no_enable_prefix_caching=true \ - this apparently works
+# # Line 309-311 in utils.py
+# if isinstance(v, bool):
+#     if v:
+#         cli_args.append(f"--{k}")
+#     # bool False: SKIPPED ENTIRELY — never emits --no-enable-prefix-caching!
+# maybe:
+# if isinstance(v, bool):
+#     if v:
+#         cli_args.append(f"--{k}")
+#     else:
+#         cli_args.append(f"--no-{k}")
 
 cd "$TRAIN_DIR"
 
@@ -109,8 +114,9 @@ python -m verl.trainer.main_ppo \
     actor_rollout_ref.rollout.load_format=auto \
     actor_rollout_ref.rollout.dtype=bfloat16 \
     actor_rollout_ref.rollout.tensor_model_parallel_size=1 \
-    actor_rollout_ref.rollout.gpu_memory_utilization=0.88 \
-    actor_rollout_ref.rollout.max_num_batched_tokens=40960 \
+    actor_rollout_ref.rollout.gpu_memory_utilization=0.9 \
+    actor_rollout_ref.rollout.max_num_batched_tokens=41960 \
+    actor_rollout_ref.rollout.max_num_seqs=64 \
     actor_rollout_ref.rollout.enable_chunked_prefill=True \
     actor_rollout_ref.rollout.temperature=0.6 \
     actor_rollout_ref.rollout.top_p=0.95 \
@@ -136,7 +142,6 @@ python -m verl.trainer.main_ppo \
     trainer.nnodes=1 \
     trainer.save_freq=100 \
     trainer.test_freq=20 \
-    ray_kwargs.ray_init.num_cpus=64 \
     trainer.total_epochs=1
 
 echo "==========================================="
