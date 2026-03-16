@@ -1,18 +1,15 @@
 #!/bin/bash
-# verl Installation Script for SLURM Cluster (FSDP2 + vLLM)
-# Tested on: H100 80GB, CUDA 13.1, Python 3.12
-# Date: 2026-02-04
+# verl Installation Script (FSDP2 + SGLang)
+# Based on: Dockerfile.stable.sglang and .github/workflows/sgl.yml
+# Cluster: H100 80GB, CUDA 13.1, Python 3.12
+# Date: 2026-03-11
 
-set -e  # Exit on error
+set -e
 
-echo "=== verl Installation Script ==="
-echo "Target: FSDP2 training + vLLM rollouts"
-echo ""
-
-# Configuration
 ENV_NAME="verl_env"
 VERL_DIR="$HOME/SSL_research/verl"
-VLLM_BUILD_DIR="$HOME/SSL_research/vllm_build"
+
+echo "=== verl Installation (FSDP2 + SGLang) ==="
 
 # Step 1: Create conda environment
 echo "=== Step 1: Creating conda environment ==="
@@ -20,56 +17,37 @@ source ~/miniconda3/bin/activate
 conda create -n $ENV_NAME python=3.12 -y
 conda activate $ENV_NAME
 
-# Step 2: Install PyTorch
-echo "=== Step 2: Installing PyTorch 2.9.1 (cu129) ==="
-pip install torch==2.9.1 torchvision torchaudio --index-url https://download.pytorch.org/whl/cu129
+# Step 2: Install SGLang (brings PyTorch 2.9.1+cu129)
+echo "=== Step 2: Installing SGLang 0.5.6.post2 ==="
+pip install "sglang[all]==0.5.6.post2" --no-cache-dir
+pip install torch-memory-saver --no-cache-dir
 
-# Step 3: Clone and build vLLM from source
-echo "=== Step 3: Building vLLM 0.12.0 from source ==="
-cd $(dirname $VLLM_BUILD_DIR)
-rm -rf $VLLM_BUILD_DIR
-git clone --depth 1 -b v0.12.0 https://github.com/vllm-project/vllm.git $(basename $VLLM_BUILD_DIR)
-cd $VLLM_BUILD_DIR
-
-# Remove torch pins from requirements
-find requirements -name "*.txt" -print0 | xargs -0 sed -i '/torch/d'
-
-# Install build deps and build
-pip install -r requirements/build.txt
-
-# Set CUDA paths for compilation
-export CUDA_HOME=/usr/local/cuda-13.1  # Adjust if your CUDA path differs
-export PATH=$CUDA_HOME/bin:$PATH
-export MAX_JOBS=32  # Adjust based on available CPUs
-
-echo "Building vLLM (this takes ~1-2 hours)..."
-pip install -e . --no-build-isolation --no-deps
-
-# Install vLLM CUDA requirements
-echo "=== Step 4: Installing vLLM CUDA requirements ==="
-pip install -r requirements/cuda.txt
-
-# Step 5: Install FlashAttention (prebuilt wheel)
-echo "=== Step 5: Installing FlashAttention 2.8.1 ==="
-cd $HOME/SSL_research
+# Step 3: Install FlashAttention (prebuilt wheel, no compilation)
+echo "=== Step 3: Installing FlashAttention 2.8.1 ==="
+cd /tmp
 wget -q https://github.com/Dao-AILab/flash-attention/releases/download/v2.8.1/flash_attn-2.8.1+cu12torch2.9cxx11abiTRUE-cp312-cp312-linux_x86_64.whl
 pip install flash_attn-2.8.1+cu12torch2.9cxx11abiTRUE-cp312-cp312-linux_x86_64.whl
-rm flash_attn-2.8.1+cu12torch2.9cxx11abiTRUE-cp312-cp312-linux_x86_64.whl
+rm flash_attn-*.whl
 
-# Step 6: Install core dependencies
-echo "=== Step 6: Installing core dependencies ==="
-pip install accelerate codetiming datasets hydra-core liger-kernel pandas peft \
-    "pyarrow>=19.0.0" pybind11 pylatexenc \
-    "tensordict>=0.8.0,<=0.10.0,!=0.9.0" torchdata \
-    wandb packaging uvicorn fastapi tensorboard \
-    mathruler qwen_vl_utils latex2sympy2_extended math_verify
+# Step 4: Install core dependencies
+echo "=== Step 4: Installing core dependencies ==="
+pip install pybind11 accelerate codetiming datasets dill hydra-core liger-kernel \
+    "numpy<2.0.0" pandas peft "pyarrow>=19.0.0" pylatexenc \
+    ray[default] "tensordict>=0.8.0,<=0.10.0,!=0.9.0" torchdata \
+    transformers wandb packaging uvicorn fastapi tensorboard \
+    mathruler qwen_vl_utils latex2sympy2_extended math_verify \
+    hf_transfer cupy-cuda12x
 
-# Step 7: Install verl
-echo "=== Step 7: Installing verl ==="
+# Step 5: Install verl from source
+echo "=== Step 5: Installing verl ==="
 cd $VERL_DIR
 pip install --no-deps -e .
 
-# Step 8: Verify installation
+# Step 6: Fix cuDNN (MUST be last — flash_attn/ray revert it to 9.10)
+echo "=== Step 6: Fixing cuDNN (must be last!) ==="
+pip install --no-deps --force-reinstall nvidia-cudnn-cu12==9.16.0.29
+
+# Step 7: Verify
 echo ""
 echo "=== Verification ==="
 python -c "
@@ -78,23 +56,17 @@ print(f'PyTorch: {torch.__version__}')
 print(f'CUDA available: {torch.cuda.is_available()}')
 if torch.cuda.is_available():
     print(f'GPU: {torch.cuda.get_device_name(0)}')
-
-import vllm
-print(f'vLLM: {vllm.__version__}')
-
+import sglang
+print(f'SGLang: {sglang.__version__}')
 import flash_attn
 print(f'FlashAttn: {flash_attn.__version__}')
-
 import ray
 print(f'Ray: {ray.__version__}')
-
 import verl
 print(f'verl: {verl.__version__}')
-
 print()
 print('=== Installation successful! ===')
 "
 
 echo ""
-echo "To use: conda activate $ENV_NAME"
-echo "Optional: rm -rf $VLLM_BUILD_DIR  # to save ~2GB"
+echo "Usage: conda activate $ENV_NAME"
