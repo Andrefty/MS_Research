@@ -147,7 +147,7 @@ python -m verl.trainer.main_ppo \
     trainer.n_gpus_per_node=$NUM_GPUS \
     trainer.resume_mode=auto \
     trainer.nnodes=1 \
-    trainer.save_freq=100 \
+    trainer.save_freq=183 \
     trainer.test_freq=20 \
     trainer.total_epochs=1
 

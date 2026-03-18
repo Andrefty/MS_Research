@@ -122,7 +122,6 @@ def main():
     
     if not HAS_WANDB:
         print("WandB not available. Printing explanation only.\n")
-        print(explain_grpo_metrics())
         return
     
     print(f"Fetching data from WandB run: {args.run_path}")
@@ -133,7 +132,6 @@ def main():
     except Exception as e:
         print(f"Error fetching WandB data: {e}")
         print("\nMake sure you're logged in: wandb login")
-        print(explain_grpo_metrics())
         return
     
     # Print config
@@ -157,7 +155,7 @@ def main():
         print(f"  Count: {stats['count']}")
     
     # Print explanation
-    print(explain_grpo_metrics())
+    # print(explain_grpo_metrics())
     
     # Save to JSON if requested
     if args.save_json:
