@@ -51,12 +51,16 @@ echo "Available GPUs:"
 nvidia-smi --query-gpu=index,name,memory.total --format=csv
 
 # WandB logging
-export WANDB_PROJECT="vulnerability_grpo"
-export WANDB_RUN_NAME="qwen3_4b_verl_grpo_$(date +%Y%m%d_%H%M)"
+export WANDB_PROJECT="vuln_qwen3_4b_verl_grpo_sglang"
+export WANDB_RUN_NAME="n_16_lr_5e-6_$(date +%Y%m%d_%H%M)"
 export WANDB_API_KEY="${WANDB_API_KEY:-}"
 
 # Completion logging for debugging (logs all completions during training)
 export GRPO_COMPLETION_LOG="$OUTPUT_DIR/verl_completions_debug.jsonl"
+
+# VERL output directories
+export VERL_VAL_OUTPUT_DIR="$OUTPUT_DIR/val_output"
+export VERL_TRAIN_ROLLOUT_DIR="$OUTPUT_DIR/train_rollout"
 
 # Number of GPUs
 NUM_GPUS=3
@@ -107,7 +111,7 @@ python -m verl.trainer.main_ppo \
     data.filter_overlong_prompts=True \
     data.truncation=middle \
     actor_rollout_ref.model.path=$SFT_CHECKPOINT \
-    actor_rollout_ref.actor.optim.lr=1e-6 \
+    actor_rollout_ref.actor.optim.lr=5e-6 \
     actor_rollout_ref.model.use_remove_padding=True \
     actor_rollout_ref.model.enable_gradient_checkpointing=True \
     actor_rollout_ref.model.enable_activation_offload=True \
@@ -130,7 +134,7 @@ python -m verl.trainer.main_ppo \
     actor_rollout_ref.rollout.temperature=0.6 \
     actor_rollout_ref.rollout.top_p=0.95 \
     actor_rollout_ref.rollout.top_k=20 \
-    actor_rollout_ref.rollout.n=4 \
+    actor_rollout_ref.rollout.n=16 \
     actor_rollout_ref.rollout.log_prob_micro_batch_size_per_gpu=2 \
     actor_rollout_ref.rollout.disable_log_stats=False \
     actor_rollout_ref.ref.fsdp_config.param_offload=True \
@@ -147,7 +151,12 @@ python -m verl.trainer.main_ppo \
     trainer.n_gpus_per_node=$NUM_GPUS \
     trainer.resume_mode=auto \
     trainer.nnodes=1 \
-    trainer.save_freq=183 \
+    trainer.save_freq=50 \
+    trainer.remove_previous_ckpt_in_save=True \
+    trainer.val_before_train=True \
+    trainer.log_val_generations=50 \
+    trainer.validation_data_dir=$VERL_VAL_OUTPUT_DIR \
+    trainer.rollout_data_dir=$VERL_TRAIN_ROLLOUT_DIR \
     trainer.test_freq=20 \
     trainer.total_epochs=1
 

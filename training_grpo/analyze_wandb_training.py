@@ -1,173 +1,406 @@
 #!/usr/bin/env python3
 """
-Analyze GRPO training metrics from WandB.
-Fetches training history and provides statistics/visualizations.
+Analyze veRL GRPO training metrics from WandB.
+Fetches training history from one or more runs and provides statistics + visualizations.
 
 Usage:
-    python analyze_wandb_training.py [--save-plots]
+    # Single run
+    python analyze_wandb_training.py --run-ids 48hbazzc
+
+    # Multiple runs (e.g. resumed training)
+    python analyze_wandb_training.py --run-ids 48hbazzc hi7fv33g
+
+    # With custom project
+    python analyze_wandb_training.py --project vulnerability_grpo --entity andrefty-universitatea-politehnica-din-bucuresti --run-ids 48hbazzc
+
+    # Save plots and JSON
+    python analyze_wandb_training.py --run-ids 48hbazzc hi7fv33g --save-plots --save-json
 """
 
 import argparse
 import json
+import os
+import sys
+
 try:
     import wandb
     import pandas as pd
+    import numpy as np
     HAS_WANDB = True
 except ImportError:
     HAS_WANDB = False
-    print("Note: wandb/pandas not installed. Install with: pip install wandb pandas")
 
-def fetch_run_data(run_path):
-    """Fetch run data from WandB API."""
+try:
+    import matplotlib
+    matplotlib.use('Agg')
+    import matplotlib.pyplot as plt
+    HAS_MPL = True
+except ImportError:
+    HAS_MPL = False
+
+
+# ─────────────────────────────────────────────
+# veRL GRPO metric definitions
+# ─────────────────────────────────────────────
+METRIC_GROUPS = {
+    "Reward & Score": {
+        "critic/score/mean":    "Average reward across batch (your 0/0.3/0.6/1.0 scale)",
+        "critic/score/max":     "Max reward in batch (should stay 1.0 if any sample gets full marks)",
+        "critic/score/min":     "Min reward in batch (0.0 = some samples still fail completely)",
+        "critic/rewards/mean":  "Same as score/mean (veRL logs both)",
+    },
+    "Policy Gradient": {
+        "actor/pg_loss":           "PPO clipped policy gradient loss. Negative = policy improving on high-advantage tokens",
+        "actor/pg_clipfrac":       "Fraction of tokens where ratio π_new/π_old exceeded clip range (ε=0.2). "
+                                   "Healthy: 5-15%. Very low (<1%) = policy barely updating",
+        "actor/pg_clipfrac_lower": "Fraction clipped on lower bound (ratio < 1-ε: tokens being suppressed)",
+    },
+    "Policy Health": {
+        "actor/entropy":    "Token distribution entropy. Higher = more random, lower = more confident. "
+                            "Decreasing over training = model sharpening (normal but watch for collapse)",
+        "actor/ppo_kl":     "KL divergence vs reference policy (measured even if KL penalty disabled). "
+                            "Shows how far policy has drifted from SFT checkpoint",
+        "actor/kl_loss":    "KL penalty loss (0.0 if use_kl_loss=False)",
+        "actor/grad_norm":  "L2 norm of gradients. Healthy: 0.1-10. Watch for spikes (instability)",
+        "actor/lr":         "Current learning rate",
+    },
+    "Response Quality": {
+        "response_length/mean":       "Average response length in tokens",
+        "response_length/max":        "Max response length (should equal max_response_length if any hit cap)",
+        "response_length/min":        "Min response length",
+        "response_length/clip_ratio": "Fraction of responses that hit max_response_length (truncated). "
+                                      "High = model tends to generate long outputs that get cut off",
+    },
+    "Validation": {
+        "val-core/vulnerability_detection/acc/mean@1": "Greedy-decoded vulnerability detection accuracy on val set",
+    },
+    "GRPO Advantages": {
+        "critic/advantages/mean": "Mean advantage (should be near 0 for normalized advantages)",
+        "critic/advantages/max":  "Max advantage in batch",
+        "critic/advantages/min":  "Min advantage (negative = worse than group average)",
+    },
+    "Performance": {
+        "perf/throughput":                 "Tokens processed per second",
+        "perf/time_per_step":              "Wall-clock seconds per training step",
+        "perf/cpu_memory_used_gb":         "System RAM usage in GB",
+        "perf/max_memory_reserved_gb":     "Peak GPU memory reserved in GB",
+        "perf/max_memory_allocated_gb":    "Peak GPU memory allocated in GB",
+        "timing_s/gen":                    "Time spent on rollout generation per step (s)",
+        "timing_s/update_actor":           "Time spent on actor update per step (s)",
+        "timing_s/old_log_prob":           "Time spent computing reference log probs per step (s)",
+        "timing_s/reward":                 "Time spent computing reward per step (s)",
+    },
+}
+
+# Metrics to plot (organized by subplot)
+PLOT_PANELS = [
+    ("Reward (score/mean)", ["critic/score/mean"], {}),
+    ("Policy Gradient Loss", ["actor/pg_loss"], {}),
+    ("Clip Fraction", ["actor/pg_clipfrac", "actor/pg_clipfrac_lower"], {}),
+    ("Entropy", ["actor/entropy"], {}),
+    ("KL Divergence (measured)", ["actor/ppo_kl"], {}),
+    ("Grad Norm", ["actor/grad_norm"], {}),
+    ("Response Length", ["response_length/mean"], {}),
+    ("Response Clip Ratio", ["response_length/clip_ratio"], {}),
+    ("Val Accuracy", ["val-core/vulnerability_detection/acc/mean@1"], {"marker": "o"}),
+    ("Step Time (s)", ["perf/time_per_step"], {}),
+    ("Gen / Update / LogProb Time", ["timing_s/gen", "timing_s/update_actor", "timing_s/old_log_prob"], {}),
+    ("Memory (GB)", ["perf/cpu_memory_used_gb", "perf/max_memory_reserved_gb"], {}),
+]
+
+
+def fetch_and_merge_runs(entity, project, run_ids):
+    """Fetch and concatenate history from multiple wandb runs."""
     api = wandb.Api()
-    run = api.run(run_path)
-    
-    # Get config
-    config = dict(run.config)
-    
-    # Get history (all logged metrics)
-    history = run.history()
-    
-    # Get summary (final values)
-    summary = dict(run.summary)
-    
-    return config, history, summary
+    all_history = []
+    all_configs = []
 
-def analyze_rewards(history):
-    """Analyze reward metrics from training history."""
-    # Key metrics for GRPO
-    metrics_to_analyze = [
-        'train/reward',
-        'train/rewards/reward_fn/mean',
-        'train/rewards/reward_fn/std',
-        'train/loss',
-        'train/entropy',
-        'train/learning_rate',
-        'train/grad_norm',
-    ]
-    
-    results = {}
-    for metric in metrics_to_analyze:
-        if metric in history.columns:
-            data = history[metric].dropna()
-            if len(data) > 0:
-                results[metric] = {
-                    'min': float(data.min()),
-                    'max': float(data.max()),
-                    'mean': float(data.mean()),
-                    'std': float(data.std()),
-                    'first': float(data.iloc[0]),
-                    'last': float(data.iloc[-1]),
-                    'count': len(data),
-                }
-    
-    return results
+    for run_id in run_ids:
+        run_path = f"{entity}/{project}/{run_id}"
+        print(f"  Fetching: {run_path}")
+        run = api.run(run_path)
+        history = run.history(samples=2000)
+        config = dict(run.config)
+        summary = dict(run.summary)
 
-def explain_grpo_metrics():
-    """Explain what the GRPO metrics mean."""
-    explanation = """
-=== GRPO Training Metrics Explanation ===
+        all_history.append(history)
+        all_configs.append({"run_id": run_id, "config": config, "summary": summary,
+                            "name": run.name, "state": run.state, "steps": len(history)})
 
-UNDERSTANDING THE REWARD VALUES:
---------------------------------
-The reward you see (~0.17) is the AVERAGE reward across all samples in a batch.
-This is NOT the raw reward values (0.0, 0.3, 0.6, 1.0) directly.
+    # Concatenate histories
+    merged = pd.concat(all_history, ignore_index=True)
 
-Here's why:
-1. Each sample gets one of 4 rewards: 0.0, 0.3, 0.6, or 1.0
-2. GRPO generates multiple completions per prompt (num_generations=4)
-3. The logged 'reward' is the mean across the batch
+    # Sort by global_step if available
+    if "training/global_step" in merged.columns:
+        merged = merged.sort_values("training/global_step").reset_index(drop=True)
 
-For example, if in one batch:
-- 2 samples got 0.0 (wrong classification, no line matches)
-- 1 sample got 0.3 (wrong classification but some lines correct)  
-- 1 sample got 0.6 (correct classification but <50% lines)
-- 1 sample got 1.0 (correct classification + >50% lines)
+    return merged, all_configs
 
-Average = (0 + 0 + 0.3 + 0.6 + 1.0) / 5 = 0.38
 
-So seeing 0.17 means roughly:
-- If samples rarely get 1.0 or 0.6, and mostly get 0.0 with occasional 0.3
-- (0.0 * 4 + 0.3 * 1) / 5 ≈ 0.06 would be very bad
-- (0.0 * 3 + 0.3 * 2) / 5 ≈ 0.12 still poor
-- (0.0 * 2 + 0.3 * 2 + 0.6 * 1) / 5 ≈ 0.24 getting better
+def print_metric_summary(history, metric_name, description=None, indent="  "):
+    """Print summary statistics for a single metric."""
+    if metric_name not in history.columns:
+        return False
 
-A reward of 0.17 suggests:
-- Most samples are getting 0.0 or 0.3
-- Very few are achieving the full 1.0 reward
-- The model struggles with either classification OR line localization
+    data = history[metric_name].dropna()
+    if len(data) == 0:
+        return False
 
-WHY THE REWARD IS FLAT:
------------------------
-1. Task is hard: Vulnerability detection requires semantic understanding
-2. Sparse reward: Only 4 discrete values, hard to get incremental signal
-3. One epoch only: Model may need more training to improve
-4. Cold start: SFT model may not have learned task well enough
+    print(f"\n{indent}{metric_name}:")
+    if description:
+        # Wrap description at ~80 chars
+        desc_lines = []
+        words = description.split()
+        line = ""
+        for w in words:
+            if len(line) + len(w) + 1 > 72:
+                desc_lines.append(line)
+                line = w
+            else:
+                line = f"{line} {w}" if line else w
+        if line:
+            desc_lines.append(line)
+        for dl in desc_lines:
+            print(f"{indent}  → {dl}")
 
-WHAT WOULD "GOOD" LOOK LIKE:
-----------------------------
-- Reward increasing from ~0.17 to ~0.4-0.5 over training
-- Would indicate model learning to get more 0.6 and 1.0 rewards
-- Final reward of 0.7+ would suggest strong task performance
-"""
-    return explanation
+    print(f"{indent}  points: {len(data)}")
+    print(f"{indent}  range:  [{data.min():.6f}, {data.max():.6f}]")
+    print(f"{indent}  mean:   {data.mean():.6f} ± {data.std():.6f}")
+    print(f"{indent}  first → last: {data.iloc[0]:.6f} → {data.iloc[-1]:.6f}")
+
+    # Show trajectory
+    if len(data) >= 6:
+        n = len(data)
+        indices = [0, 1, n // 4, n // 2, 3 * n // 4, n - 2, n - 1]
+        vals = [f"{data.iloc[i]:.4f}" for i in indices if i < n]
+        print(f"{indent}  trajectory: [{', '.join(vals)}]")
+
+    return True
+
+
+def print_analysis(history, configs, verbose=False):
+    """Print comprehensive training analysis."""
+    print("\n" + "=" * 70)
+    print("  veRL GRPO Training Analysis")
+    print("=" * 70)
+
+    # Run info
+    print("\n── Run Info ──")
+    total_steps = 0
+    for c in configs:
+        state_icon = "✅" if c["state"] == "finished" else "⏸️" if c["state"] == "crashed" else "🔄"
+        print(f"  {state_icon} {c['run_id']} ({c['name']}): {c['steps']} steps [{c['state']}]")
+        total_steps += c["steps"]
+    print(f"  Total steps: {total_steps}")
+
+    # Print each metric group
+    for group_name, metrics in METRIC_GROUPS.items():
+        printed_any = False
+        header_printed = False
+        for metric_name, description in metrics.items():
+            desc = description if verbose else None
+            if not header_printed:
+                print(f"\n── {group_name} ──")
+                header_printed = True
+            ok = print_metric_summary(history, metric_name, desc)
+            if ok:
+                printed_any = True
+        if not printed_any and header_printed:
+            print("  (no data)")
+
+    # Diagnostic checks
+    print(f"\n── Diagnostics ──")
+    issues = []
+    suggestions = []
+
+    # Check clipfrac
+    if "actor/pg_clipfrac" in history.columns:
+        cf = history["actor/pg_clipfrac"].dropna()
+        if len(cf) > 0:
+            mean_cf = cf.mean()
+            if mean_cf < 0.01:
+                issues.append(f"⚠️  pg_clipfrac very low ({mean_cf:.4f}) — policy barely updating per step")
+                suggestions.append("Consider increasing LR (e.g. 1e-6 → 5e-6)")
+                suggestions.append("Consider increasing n (e.g. 4 → 8) for better advantage estimation")
+            elif mean_cf > 0.20:
+                issues.append(f"⚠️  pg_clipfrac high ({mean_cf:.4f}) — updates may be too aggressive")
+                suggestions.append("Consider lowering LR or increasing clip_range")
+
+    # Check reward trend
+    if "critic/score/mean" in history.columns:
+        scores = history["critic/score/mean"].dropna()
+        if len(scores) >= 20:
+            first_q = scores.iloc[:len(scores)//4].mean()
+            last_q = scores.iloc[-len(scores)//4:].mean()
+            delta = last_q - first_q
+            if abs(delta) < 0.02:
+                issues.append(f"⚠️  Reward essentially flat (Δ={delta:+.4f} over training)")
+            elif delta > 0:
+                print(f"  ✅ Reward improving: {first_q:.4f} → {last_q:.4f} (Δ={delta:+.4f})")
+            else:
+                issues.append(f"⚠️  Reward declining: {first_q:.4f} → {last_q:.4f} (Δ={delta:+.4f})")
+
+    # Check entropy collapse
+    if "actor/entropy" in history.columns:
+        ent = history["actor/entropy"].dropna()
+        if len(ent) >= 10:
+            if ent.iloc[-1] < ent.iloc[0] * 0.5:
+                issues.append("⚠️  Entropy collapsed >50% — possible mode collapse")
+            elif ent.iloc[-1] < ent.iloc[0] * 0.8:
+                print(f"  ℹ️  Entropy decreased {ent.iloc[0]:.4f} → {ent.iloc[-1]:.4f} (normal sharpening)")
+
+    # Check response length trend
+    if "response_length/mean" in history.columns:
+        rl = history["response_length/mean"].dropna()
+        if len(rl) >= 10:
+            rl_delta = rl.iloc[-1] - rl.iloc[0]
+            if rl_delta < -500:
+                print(f"  ✅ Response length decreasing: {rl.iloc[0]:.0f} → {rl.iloc[-1]:.0f} (model learning conciseness)")
+            elif rl_delta > 500:
+                issues.append(f"⚠️  Response length increasing: {rl.iloc[0]:.0f} → {rl.iloc[-1]:.0f} (verbose drift)")
+
+    # Check val accuracy
+    for val_key in ["val-core/vulnerability_detection/acc/mean@1"]:
+        if val_key in history.columns:
+            val = history[val_key].dropna()
+            if len(val) >= 2:
+                print(f"  ℹ️  Val accuracy: {val.iloc[0]:.4f} → {val.iloc[-1]:.4f} (Δ={val.iloc[-1]-val.iloc[0]:+.4f})")
+
+    if issues:
+        print()
+        for issue in issues:
+            print(f"  {issue}")
+    if suggestions:
+        print()
+        for s in suggestions:
+            print(f"  💡 {s}")
+
+    if not issues:
+        print("  ✅ No issues detected")
+
+
+def plot_training(history, configs, output_dir):
+    """Generate training curve plots."""
+    if not HAS_MPL:
+        print("matplotlib not available, skipping plots")
+        return
+
+    # Get step axis
+    if "training/global_step" in history.columns:
+        steps = history["training/global_step"]
+    else:
+        steps = history.index
+
+    n_panels = len(PLOT_PANELS)
+    n_cols = 3
+    n_rows = (n_panels + n_cols - 1) // n_cols
+
+    fig, axes = plt.subplots(n_rows, n_cols, figsize=(6 * n_cols, 4 * n_rows))
+    axes = axes.flatten()
+
+    run_label = ", ".join(c["run_id"][:8] for c in configs)
+    fig.suptitle(f"veRL GRPO Training — {run_label}", fontsize=14, fontweight='bold')
+
+    for idx, (title, metric_keys, kwargs) in enumerate(PLOT_PANELS):
+        ax = axes[idx]
+        has_data = False
+        for mk in metric_keys:
+            if mk in history.columns:
+                data = history[mk].dropna()
+                if len(data) > 0:
+                    x = steps.iloc[data.index] if len(steps) == len(history) else data.index
+                    label = mk.split("/")[-1] if len(metric_keys) > 1 else None
+                    ax.plot(x, data.values, label=label, alpha=0.8, linewidth=1.2, **kwargs)
+                    has_data = True
+
+        ax.set_title(title, fontsize=10)
+        ax.set_xlabel("Step", fontsize=8)
+        ax.grid(True, alpha=0.3)
+        ax.tick_params(labelsize=8)
+        if len(metric_keys) > 1 and has_data:
+            ax.legend(fontsize=7)
+        if not has_data:
+            ax.text(0.5, 0.5, "No data", ha='center', va='center', transform=ax.transAxes, color='gray')
+
+    # Hide unused axes
+    for idx in range(n_panels, len(axes)):
+        axes[idx].set_visible(False)
+
+    plt.tight_layout()
+    os.makedirs(output_dir, exist_ok=True)
+    plot_path = os.path.join(output_dir, "grpo_training_curves.png")
+    plt.savefig(plot_path, dpi=150, bbox_inches='tight')
+    plt.close()
+    print(f"\n  📊 Plot saved: {plot_path}")
+    return plot_path
+
 
 def main():
-    parser = argparse.ArgumentParser(description="Analyze GRPO training metrics from WandB")
-    parser.add_argument("--run-path",
-                        help="WandB run path")
+    parser = argparse.ArgumentParser(description="Analyze veRL GRPO training from WandB")
+    parser.add_argument("--run-ids", nargs="+", required=True,
+                        help="WandB run ID(s). Multiple for resumed runs.")
+    parser.add_argument("--entity", default="andrefty-universitatea-politehnica-din-bucuresti",
+                        help="WandB entity/team")
+    parser.add_argument("--project", default="vulnerability_grpo",
+                        help="WandB project name")
+    parser.add_argument("--save-plots", action="store_true", help="Save training curve plots")
     parser.add_argument("--save-json", action="store_true", help="Save metrics to JSON")
-    parser.add_argument("--output-dir", default=".", help="Output directory for files")
+    parser.add_argument("--output-dir", default="training_grpo/training_analysis",
+                        help="Output directory")
+    parser.add_argument("--verbose", "-v", action="store_true",
+                        help="Show metric descriptions")
     args = parser.parse_args()
-    
+
     if not HAS_WANDB:
-        print("WandB not available. Printing explanation only.\n")
-        return
-    
-    print(f"Fetching data from WandB run: {args.run_path}")
-    print("-" * 60)
-    
-    try:
-        config, history, summary = fetch_run_data(args.run_path)
-    except Exception as e:
-        print(f"Error fetching WandB data: {e}")
-        print("\nMake sure you're logged in: wandb login")
-        return
-    
-    # Print config
-    print("\n=== Training Configuration ===")
-    important_config = ['learning_rate', 'num_train_epochs', 'per_device_train_batch_size',
-                        'gradient_accumulation_steps', 'num_generations', 'beta', 
-                        'temperature', 'top_p', 'top_k', 'max_length']
-    for key in important_config:
-        if key in config:
-            print(f"  {key}: {config[key]}")
-    
-    # Analyze rewards
-    print("\n=== Reward Statistics ===")
-    reward_stats = analyze_rewards(history)
-    
-    for metric, stats in reward_stats.items():
-        print(f"\n{metric}:")
-        print(f"  Range: [{stats['min']:.4f}, {stats['max']:.4f}]")
-        print(f"  Mean ± Std: {stats['mean']:.4f} ± {stats['std']:.4f}")
-        print(f"  First → Last: {stats['first']:.4f} → {stats['last']:.4f}")
-        print(f"  Count: {stats['count']}")
-    
-    # Print explanation
-    # print(explain_grpo_metrics())
-    
-    # Save to JSON if requested
+        print("Error: wandb/pandas not installed. Install with: pip install wandb pandas")
+        sys.exit(1)
+
+    print(f"Fetching {len(args.run_ids)} run(s) from {args.entity}/{args.project}...")
+    history, configs = fetch_and_merge_runs(args.entity, args.project, args.run_ids)
+
+    print_analysis(history, configs, verbose=args.verbose)
+
+    if args.save_plots:
+        plot_training(history, configs, args.output_dir)
+
     if args.save_json:
+        os.makedirs(args.output_dir, exist_ok=True)
         output = {
-            'config': config,
-            'reward_stats': reward_stats,
-            'summary': {k: v for k, v in summary.items() if not k.startswith('_')}
+            "runs": [{"run_id": c["run_id"], "name": c["name"], "state": c["state"],
+                       "steps": c["steps"]} for c in configs],
+            "total_steps": sum(c["steps"] for c in configs),
+            "final_summary": configs[-1].get("summary", {}),
         }
-        output_path = f"{args.output_dir}/grpo_training_analysis.json"
-        with open(output_path, 'w') as f:
+        # Add trajectory data for key metrics
+        key_metrics = ["critic/score/mean", "actor/entropy", "actor/pg_clipfrac",
+                        "response_length/mean", "response_length/clip_ratio"]
+        output["trajectories"] = {}
+        for m in key_metrics:
+            if m in history.columns:
+                data = history[m].dropna()
+                output["trajectories"][m] = {
+                    "values": data.tolist(),
+                    "steps": history["training/global_step"].iloc[data.index].tolist()
+                    if "training/global_step" in history.columns else data.index.tolist(),
+                }
+
+        # Remove non-serializable values from summary
+        filtered_summary = {}
+        for k, v in output["final_summary"].items():
+            if k.startswith("_"):
+                continue
+            try:
+                json.dumps(v)
+                filtered_summary[k] = v
+            except (TypeError, ValueError):
+                filtered_summary[k] = str(v)
+        output["final_summary"] = filtered_summary
+
+        json_path = os.path.join(args.output_dir, "grpo_training_analysis.json")
+        with open(json_path, 'w') as f:
             json.dump(output, f, indent=2, default=str)
-        print(f"\nSaved analysis to {output_path}")
+        print(f"  📄 JSON saved: {json_path}")
+
 
 if __name__ == "__main__":
     main()
