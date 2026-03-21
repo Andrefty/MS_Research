@@ -103,6 +103,15 @@ unset ROCR_VISIBLE_DEVICES
 #     actor_rollout_ref.model.fused_kernel_options.impl_backend=torch \
 #     actor_rollout_ref.actor.use_torch_compile=True \
 
+# Dynamic batch size (sequence packing) — not using for now to keep things simple, (also for n=16 run)
+# but could improve throughput with variable-length sequences (prompts: 147-28680 tokens):
+#     actor_rollout_ref.actor.use_dynamic_bsz=True \
+#     actor_rollout_ref.actor.ppo_max_token_len_per_gpu=81920 \
+#     actor_rollout_ref.rollout.log_prob_use_dynamic_bsz=True \
+#     actor_rollout_ref.rollout.log_prob_max_token_len_per_gpu=81920 \
+#     actor_rollout_ref.ref.log_prob_use_dynamic_bsz=True \
+#     actor_rollout_ref.ref.log_prob_max_token_len_per_gpu=81920 \
+
 cd "$TRAIN_DIR"
 
 python -m verl.trainer.main_ppo \
@@ -122,8 +131,6 @@ python -m verl.trainer.main_ppo \
     actor_rollout_ref.model.use_fused_kernels=True \
     actor_rollout_ref.actor.ppo_mini_batch_size=48 \
     actor_rollout_ref.actor.ppo_micro_batch_size_per_gpu=1 \
-    actor_rollout_ref.actor.use_dynamic_bsz=True \
-    actor_rollout_ref.actor.ppo_max_token_len_per_gpu=81920 \
     actor_rollout_ref.actor.use_kl_loss=False \
     actor_rollout_ref.actor.kl_loss_coef=0.0 \
     actor_rollout_ref.actor.strategy=fsdp2 \
@@ -143,14 +150,10 @@ python -m verl.trainer.main_ppo \
     actor_rollout_ref.rollout.top_p=0.95 \
     actor_rollout_ref.rollout.top_k=20 \
     actor_rollout_ref.rollout.n=16 \
-    actor_rollout_ref.rollout.log_prob_micro_batch_size_per_gpu=4 \
-    actor_rollout_ref.rollout.log_prob_use_dynamic_bsz=True \
-    actor_rollout_ref.rollout.log_prob_max_token_len_per_gpu=81920 \
+    actor_rollout_ref.rollout.log_prob_micro_batch_size_per_gpu=2 \
     actor_rollout_ref.rollout.disable_log_stats=False \
     actor_rollout_ref.ref.fsdp_config.param_offload=True \
-    actor_rollout_ref.ref.log_prob_micro_batch_size_per_gpu=4 \
-    actor_rollout_ref.ref.log_prob_use_dynamic_bsz=True \
-    actor_rollout_ref.ref.log_prob_max_token_len_per_gpu=81920 \
+    actor_rollout_ref.ref.log_prob_micro_batch_size_per_gpu=2 \
     actor_rollout_ref.ref.fsdp_config.model_dtype=bf16 \
     actor_rollout_ref.ref.strategy=fsdp2 \
     algorithm.use_kl_in_reward=False \
