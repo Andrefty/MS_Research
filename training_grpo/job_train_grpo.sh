@@ -52,7 +52,7 @@ nvidia-smi --query-gpu=index,name,memory.total --format=csv
 
 # WandB logging
 export WANDB_PROJECT="vuln_qwen3_4b_verl_grpo_sglang"
-export WANDB_RUN_NAME="n_16_lr_5e-6_$(date +%Y%m%d_%H%M)"
+export WANDB_RUN_NAME="n_16_lr_1e-6_$(date +%Y%m%d_%H%M)"
 export WANDB_API_KEY="${WANDB_API_KEY:-}"
 
 # Completion logging for debugging (logs all completions during training)
@@ -102,6 +102,8 @@ unset ROCR_VISIBLE_DEVICES
 # Other optimizing options that were default but we are using with the run with n = 16:
 #     actor_rollout_ref.model.fused_kernel_options.impl_backend=torch \
 #     actor_rollout_ref.actor.use_torch_compile=True \
+# For the second job of this training run, to so we can compare the last checkpoint from the first one, i deleted this:
+#     +trainer.remove_previous_ckpt_in_save=True \
 
 # Dynamic batch size (sequence packing) — not using for now to keep things simple, (also for n=16 run)
 # but could improve throughput with variable-length sequences (prompts: 147-28680 tokens):
@@ -124,7 +126,7 @@ python -m verl.trainer.main_ppo \
     data.filter_overlong_prompts=True \
     data.truncation=middle \
     actor_rollout_ref.model.path=$SFT_CHECKPOINT \
-    actor_rollout_ref.actor.optim.lr=5e-6 \
+    actor_rollout_ref.actor.optim.lr=1e-6 \
     actor_rollout_ref.model.use_remove_padding=True \
     actor_rollout_ref.model.enable_gradient_checkpointing=True \
     actor_rollout_ref.model.enable_activation_offload=True \
@@ -166,8 +168,8 @@ python -m verl.trainer.main_ppo \
     trainer.n_gpus_per_node=$NUM_GPUS \
     trainer.resume_mode=auto \
     trainer.nnodes=1 \
-    trainer.save_freq=50 \
-    trainer.remove_previous_ckpt_in_save=True \
+    trainer.save_freq=60 \
+    +trainer.remove_previous_ckpt_in_save=True \
     trainer.val_before_train=True \
     trainer.log_val_generations=50 \
     trainer.validation_data_dir=$VERL_VAL_OUTPUT_DIR \
