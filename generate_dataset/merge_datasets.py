@@ -99,6 +99,8 @@ def load_primevul(path: str) -> list[dict]:
             "commit_id": commit_id,
             "project": project,
             "project_url": project_url,
+            "func_name": "",  # PrimeVul doesn't have func_name; could be extracted from func body
+            "filepath": vuln_sample.get('file_name', ''),
             "vuln_func": vuln_sample['func'],
             "patched_func": patched_sample['func'],
             "cve": vuln_sample.get('cve'),
@@ -176,6 +178,8 @@ def load_sven(paths: list[str]) -> list[dict]:
                 "commit_id": commit_id,
                 "project": project,
                 "project_url": f"https://{row['commit_link'].split('/commit/')[0]}" if '/commit/' in row['commit_link'] else None,
+                "func_name": row.get('func_name', ''),
+                "filepath": row.get('file_name', ''),
                 "vuln_func": row['func_src_before'],
                 "patched_func": row['func_src_after'],
                 "cve": None,  # SVEN doesn't have CVE
@@ -206,9 +210,132 @@ def parse_secvuleval_changed_lines(changed_lines_str: str) -> list[dict]:
         return []
 
 
+def _detect_line_problems(native_lines: list[dict], func_lines: list[str]) -> bool:
+    """
+    Detect if any ground truth line numbers are OOB or misindexed
+    relative to the function body.
+    
+    Returns True if problems are detected, False if all lines are clean.
+    """
+    func_line_count = len(func_lines)
+    for entry in native_lines:
+        ln = entry['line_no']
+        text = entry.get('text', '').strip()
+        # OOB check
+        if ln > func_line_count or ln < 1:
+            return True
+        # Misindexing check: line is in bounds but text doesn't match
+        if text and func_lines[ln - 1].strip() != text:
+            return True
+    return False
+
+
+def _try_text_reindex(native_lines: list[dict], func_lines: list[str]) -> Optional[list[dict]]:
+    """
+    Attempt to reindex line numbers by searching for each GT text in the function body.
+    
+    Returns reindexed list if successful, None if any entry is unresolvable.
+    """
+    reindexed = []
+    # Group GT entries by their text to handle duplicates
+    from collections import Counter
+    gt_text_counts = Counter(e['text'].strip() for e in native_lines if e.get('text', '').strip())
+    
+    # Build a map: text -> list of line positions in func_body
+    text_to_positions = defaultdict(list)
+    for i, fl in enumerate(func_lines, 1):
+        text_to_positions[fl.strip()].append(i)
+    
+    # Track which positions have been assigned (for ordered assignment of duplicates)
+    assigned_positions = {}  # text -> index into its positions list (for ordered assignment)
+    
+    func_line_count = len(func_lines)
+    
+    for entry in native_lines:
+        text = entry.get('text', '').strip()
+        if not text:
+            # Empty text lines cannot be reindexed (nothing to search for).
+            # Drop them entirely — their line_no is file-relative and unreliable,
+            # and a blank line carries no useful signal for vulnerability detection.
+            continue
+        
+        positions = text_to_positions.get(text, [])
+        
+        if len(positions) == 0:
+            # Text not found in function body at all → unresolvable
+            return None
+        elif len(positions) == 1:
+            # Unique match → reindex
+            reindexed.append({**entry, 'line_no': positions[0]})
+        else:
+            # Multiple matches — check if count matches GT occurrences
+            gt_count = gt_text_counts[text]
+            if gt_count == len(positions):
+                # Same count: assign by positional order
+                if text not in assigned_positions:
+                    assigned_positions[text] = 0
+                pos_idx = assigned_positions[text]
+                if pos_idx < len(positions):
+                    reindexed.append({**entry, 'line_no': positions[pos_idx]})
+                    assigned_positions[text] = pos_idx + 1
+                else:
+                    return None  # Shouldn't happen, but safety
+            else:
+                # Ambiguous: different counts → unresolvable
+                return None
+    
+    return reindexed
+
+
+def reindex_secvuleval_lines(native_lines: list[dict], func_body: str,
+                              fallback_difflib_lines: list[dict]) -> tuple[list[dict], str]:
+    """
+    Reindex SecVulEval line numbers to be function-relative.
+    Only modifies samples where OOB or misindexing is detected.
+    
+    Strategy:
+    1. If no problems detected → return native lines unchanged
+    2. Try text-search reindex → return if successful
+    3. Fall back to difflib-computed lines
+    
+    Args:
+        native_lines: Original parsed [{line_no, text}, ...] from changed_lines
+        func_body: The function body to reindex against
+        fallback_difflib_lines: Lines computed by extract_changed_lines_difflib()
+    
+    Returns:
+        (reindexed_lines, method) where method is 'native', 'text_reindex', or 'difflib'
+    """
+    if not native_lines:
+        return native_lines, 'native'
+    
+    func_lines = func_body.splitlines()
+    
+    # Step 1: Detect problems
+    if not _detect_line_problems(native_lines, func_lines):
+        return native_lines, 'native'
+    
+    # Step 2: Try text-search reindex
+    reindexed = _try_text_reindex(native_lines, func_lines)
+    if reindexed is not None:
+        return reindexed, 'text_reindex'
+    
+    # Step 3: Fall back to difflib
+    return fallback_difflib_lines, 'difflib'
+
+
 def load_secvuleval(paths: list[str]) -> list[dict]:
-    """Load SecVulEval dataset and transform to unified schema."""
+    """
+    Load SecVulEval dataset and transform to unified schema.
+    
+    Applies conservative reindexing of ground truth line numbers:
+    - Detects OOB (line_no > function line count) and misindexed samples
+    - Tries text-search reindexing first (matching GT text to function lines)
+    - Falls back to difflib if text search fails
+    - Leaves clean samples untouched
+    """
     samples = []
+    reindex_stats = defaultdict(int)
     
     for path in paths:
         df = pd.read_parquet(path)
@@ -231,10 +358,30 @@ def load_secvuleval(paths: list[str]) -> list[dict]:
             
             patched_row = patched_rows.iloc[0]
             
-            # Parse line changes
-            # Vulnerable sample has deleted lines, patched sample has added lines
-            deleted_lines = parse_secvuleval_changed_lines(vuln_row['changed_lines'])
-            added_lines = parse_secvuleval_changed_lines(patched_row['changed_lines'])
+            # Parse native line changes from SecVulEval
+            # These may have file-absolute line numbers (OOB) — will be fixed below
+            native_deleted = parse_secvuleval_changed_lines(vuln_row['changed_lines'])
+            native_added = parse_secvuleval_changed_lines(patched_row['changed_lines'])
+            
+            vuln_func = vuln_row['func_body']
+            patched_func = patched_row['func_body']
+            
+            # Compute difflib fallback (snippet-relative, always correct)
+            difflib_deleted, difflib_added = extract_changed_lines_difflib(
+                vuln_func, patched_func
+            )
+            
+            # Reindex: detect problems → text search → difflib fallback
+            deleted_lines, del_method = reindex_secvuleval_lines(
+                native_deleted, vuln_func, difflib_deleted
+            )
+            added_lines, add_method = reindex_secvuleval_lines(
+                native_added, patched_func, difflib_added
+            )
+            
+            # Track reindexing stats
+            reindex_stats[del_method] += 1
+            reindex_stats[f'added_{add_method}'] += 1
             
             # Extract project info
             project = vuln_row.get('project', '')
@@ -267,14 +414,20 @@ def load_secvuleval(paths: list[str]) -> list[dict]:
                 if explanations is not None and len(explanations) > 0:
                     cve_desc = ' '.join(str(e) for e in explanations)
             
+            # func_name and filepath for traceability (and future multi-file dedup)
+            func_name = vuln_row.get('func_name', '')
+            filepath = vuln_row.get('filepath', '')
+            
             samples.append({
                 "source": "secvuleval",
                 "pair_id": f"secvuleval_{project}_{commit_id}",
                 "commit_id": commit_id,
                 "project": project,
                 "project_url": vuln_row.get('project_url', ''),
-                "vuln_func": vuln_row['func_body'],
-                "patched_func": patched_row['func_body'],
+                "func_name": func_name,
+                "filepath": filepath,
+                "vuln_func": vuln_func,
+                "patched_func": patched_func,
                 "cve": cve_list[0] if len(cve_list) > 0 else None,
                 "cve_desc": cve_desc,
                 "cwe": list(cwe_list) if len(cwe_list) > 0 else None,
@@ -282,6 +435,19 @@ def load_secvuleval(paths: list[str]) -> list[dict]:
                 "added_lines": added_lines,
                 "source_row_idx": int(vuln_row['idx'])
             })
+    
+    # Report reindexing stats
+    if reindex_stats:
+        print(f"  SecVulEval reindexing stats (deleted_lines):")
+        for method in ['native', 'text_reindex', 'difflib']:
+            count = reindex_stats.get(method, 0)
+            if count > 0:
+                print(f"    {method}: {count}")
+        print(f"  SecVulEval reindexing stats (added_lines):")
+        for method in ['native', 'text_reindex', 'difflib']:
+            count = reindex_stats.get(f'added_{method}', 0)
+            if count > 0:
+                print(f"    {method}: {count}")
     
     return samples
 

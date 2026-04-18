@@ -4,9 +4,12 @@ from collections import Counter, defaultdict
 df = pd.read_parquet('training_grpo/verl_data/train.parquet')
 dfv = pd.read_parquet('training_grpo/verl_data/val.parquet')
 
-# Load commit_id -> source mapping
+# Load commit_id -> source and deleted_lines mapping
 commit_to_source = {}
+commit_to_deleted_lines = {}
 mapping_file = '/export/home/acs/stud/t/tudor.farcasanu/SSL_research/generated_finetuning_data/grpo_finetuning_dataset.jsonl'
+raw_data_file = '/export/home/acs/stud/t/tudor.farcasanu/SSL_research/Research_merged_dataset/merged_train.jsonl'
+
 try:
     with open(mapping_file, 'r', encoding='utf-8') as f:
         for line in f:
@@ -19,6 +22,21 @@ try:
                 pass
 except Exception as e:
     print(f"Warning: Could not load source mapping: {e}")
+
+try:
+    with open(raw_data_file, 'r', encoding='utf-8') as f:
+        for line in f:
+            if not line.strip(): continue
+            try:
+                d = json.loads(line)
+                if 'commit_id' in d and 'deleted_lines' in d:
+                    # make a fast lookup dict mapping line_no -> text
+                    dl_map = {item['line_no']: item['text'] for item in d['deleted_lines'] if 'line_no' in item and 'text' in item}
+                    commit_to_deleted_lines[d['commit_id']] = dl_map
+            except json.JSONDecodeError:
+                pass
+except Exception as e:
+    print(f"Warning: Could not load deleted_lines mapping: {e}")
 
 issues = defaultdict(list)
 stats = Counter()
@@ -43,13 +61,48 @@ def analyze_sample(row, split, idx):
     # Count code lines via numbered prefix (1: ..., 2: ...)
     code_match = re.search(r'```[^\n]*\n(.*?)```', prompt_text, re.DOTALL)
     code_line_count = 0
+    clean_code_lines = []
     if code_match:
         code = code_match.group(1)
+        raw_lines = [l for l in code.split('\n') if l.strip() or True] # preserve empty
+        for l in raw_lines:
+            if not l.strip() and len(clean_code_lines) == len(raw_lines) - 1:
+                pass # skip trailing empty newline
+            m = re.match(r'^\s*\d+:\s?(.*)', l)
+            if m:
+                clean_code_lines.append(m.group(1))
+            else:
+                clean_code_lines.append(l)
+        
         numbered = re.findall(r'^\s*(\d+):', code, re.MULTILINE)
         if numbered:
             code_line_count = max(int(x) for x in numbered)
         else:
-            code_line_count = len([l for l in code.split('\n') if l.strip()])
+            code_line_count = len([l for l in raw_lines if l.strip()])
+
+        # Check misindexing (only if we have the clean lines and real deleted_lines mapping)
+        if gt_lines and code_line_count > 0:
+            dl_map = commit_to_deleted_lines.get(commit_id, {})
+            misindexed_examples = []
+            
+            for ln in gt_lines:
+                # Need to be within bounds
+                if ln <= len(clean_code_lines) and ln in dl_map:
+                    snippet_text = clean_code_lines[ln-1].strip()
+                    expected_text = dl_map[ln].strip()
+                    
+                    if snippet_text != expected_text:
+                        # Allow completely empty match or minor substring changes, but track structural differences
+                        if expected_text not in snippet_text and snippet_text not in expected_text:
+                            if len(snippet_text) > 0 or len(expected_text) > 0:
+                                misindexed_examples.append({'line': ln, 'snippet': snippet_text, 'expected': expected_text})
+            
+            if misindexed_examples:
+                stats['misindexed'] += 1
+                issues['misindexed'].append({
+                    'split': split, 'idx': idx, 'commit_id': commit_id, 'source': source,
+                    'mismatches': misindexed_examples
+                })
 
     stats['total'] += 1
     stats[f'source_{source}'] += 1
@@ -93,6 +146,7 @@ print(f"=== DATA QUALITY AUDIT ===")
 print(f"Train: {len(df)}, Val: {len(dfv)}, Total: {stats['total']}")
 print()
 print(f"[OOB LINE]   GT line > snippet lines:          {stats['oob']:>5} ({100*stats['oob']/stats['total']:.1f}%)")
+print(f"[MISINDEXED] Line content mismatches dataset:  {stats['misindexed']:>5} ({100*stats['misindexed']/stats['total']:.1f}%)")
 print(f"[VULN-NOLN]  VULNERABLE but no gt_lines:       {stats['vuln_no_lines']:>5} ({100*stats['vuln_no_lines']/stats['total']:.1f}%)")
 print(f"[TINY]       Snippet <=3 lines:                {stats['tiny_snippet']:>5} ({100*stats['tiny_snippet']/stats['total']:.1f}%)")
 print(f"[HINT_CFLCT] hint says VULN but GT says NOT:   {stats['hint_gt_conflict']:>5}")
@@ -117,6 +171,15 @@ print("  OOB sources:")
 for s, c in oob_sources.most_common():
     print(f"    {s}: {c}")
 
+# Misindexed breakdown
+mis_train = sum(1 for x in issues['misindexed'] if x['split']=='train')
+mis_val = sum(1 for x in issues['misindexed'] if x['split']=='val')
+print(f"\n  Misindexed breakdown: train={mis_train}, val={mis_val}")
+mis_sources = Counter([x['source'] for x in issues['misindexed']])
+print("  Misindexed sources:")
+for s, c in mis_sources.most_common():
+    print(f"    {s}: {c}")
+
 # Tiny snippet breakdown
 tiny_train = sum(1 for x in issues['tiny'] if x['split']=='train')
 tiny_val = sum(1 for x in issues['tiny'] if x['split']=='val')
@@ -137,8 +200,17 @@ for s, c in vuln_sources.most_common():
 
 # Show OOB examples
 print(f"\n--- OOB examples ---")
-for ex in issues['oob'][:8]:
+for ex in issues['oob'][:4]:
     print(f"  [{ex['split']}:{ex['idx']}] source={ex['source']} | gt_lines={ex['gt_lines']} | code_lines={ex['code_lines']} | vuln={ex['is_vulnerable']}")
+
+# Show misindexed examples
+print(f"\n--- Misindexed examples ---")
+for ex in issues['misindexed'][:4]:
+    print(f"  [{ex['split']}:{ex['idx']}] source={ex['source']} | commit: {ex['commit_id'][:8]}")
+    for mm in ex['mismatches']:
+        print(f"    Line {mm['line']} snippet:  {mm['snippet']}")
+        print(f"    Line {mm['line']} expected: {mm['expected']}")
+
 
 # VULN with no lines examples breakdown
 print(f"\n--- 'VULNERABLE but no lines' samples ---")

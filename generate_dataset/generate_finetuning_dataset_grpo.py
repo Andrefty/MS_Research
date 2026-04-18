@@ -129,10 +129,17 @@ def build_context_section(sample):
 
 
 def get_ground_truth_lines(sample):
-    """Extract line numbers from deleted_lines for ground truth."""
+    """Extract line numbers from deleted_lines for ground truth.
+    
+    Filters out entries with empty text — blank lines are never meaningful
+    vulnerability indicators and would only add noise to the reward signal.
+    """
     deleted_lines = sample.get('deleted_lines', [])
     if deleted_lines:
-        return sorted(set(item['line_no'] for item in deleted_lines if 'line_no' in item))
+        return sorted(set(
+            item['line_no'] for item in deleted_lines
+            if 'line_no' in item and item.get('text', '').strip()
+        ))
     return []
 
 
