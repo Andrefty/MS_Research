@@ -46,8 +46,8 @@ EVAL_DIR="$WORK_DIR/evaluation"
 LOG_DIR="$WORK_DIR/logs"
 OUTPUT_DIR="$WORK_DIR/evaluation_results/${MODEL_NAME}"
 
-SGLANG_ENV_PYTHON="$HOME/.conda/envs/sglangenv/bin/python"
-EVAL_ENV_NAME="SRI_training_standard_fa_probs2"
+SGLANG_CLI="$HOME/miniconda3/envs/Res_eval_sglang_transformersv5_env/bin/sglang"
+EVAL_ENV_NAME="Res_sft_and_eval_env"
 
 # Pick a random port to avoid collisions if multiple jobs run on the same node
 # Try to find a free port between 30000 and 40000
@@ -152,7 +152,7 @@ echo ""
 echo "Starting SGLang server with $NUM_GPUS GPUs..."
 echo "Model: $MODEL_PATH"
 
-nohup $SGLANG_ENV_PYTHON -m sglang.launch_server \
+nohup $SGLANG_CLI serve \
     --model-path "$MODEL_PATH" \
     --port "$SGLANG_PORT" \
     --host "$SGLANG_HOST" \

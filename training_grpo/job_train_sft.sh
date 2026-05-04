@@ -25,15 +25,9 @@ mkdir -p "$OUTPUT_DIR"
 mkdir -p logs
 
 # Conda environment setup
-# NOTE: Run setup_training_env.sh first to create the environment with GCC 11
 source ~/miniconda3/bin/activate
-conda activate SRI_training_standard_fa_probs2
-
-# Set GCC for any JIT CUDA compilation (e.g., FlashInfer, custom ops)
-export CC="$CONDA_PREFIX/bin/x86_64-conda-linux-gnu-gcc"
-export CXX="$CONDA_PREFIX/bin/x86_64-conda-linux-gnu-g++"
-export CUDAHOSTCXX="$CONDA_PREFIX/bin/x86_64-conda-linux-gnu-g++"
-echo "Using GCC: $($CC --version | head -1)"
+conda activate Res_sft_and_eval_env
+export DS_SKIP_CUDA_CHECK=1 #On current fep, CUDA version is 13.1, but at this time PyTorch only comes prebuilt with up to CUDA 13.0, making this needed
 
 # Check GPU availability
 echo "Available GPUs:"
