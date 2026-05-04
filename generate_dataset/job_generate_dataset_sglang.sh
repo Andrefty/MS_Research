@@ -1,7 +1,7 @@
 #!/bin/bash
-#SBATCH --job-name=sglang-qwen-eval
-#SBATCH --output=/export/home/acs/stud/t/tudor.farcasanu/SSL_research/inference_experiment/logs/slurm_logs/sglang-qwen-eval-%j.log
-#SBATCH --error=/export/home/acs/stud/t/tudor.farcasanu/SSL_research/inference_experiment/logs/slurm_logs/sglang-qwen-eval-%j.err
+#SBATCH --job-name=sglang-qwen-generate-dataset
+#SBATCH --output=/export/home/acs/stud/t/tudor.farcasanu/SSL_research/inference_experiment/logs/slurm_logs/sglang-qwen-generate-dataset-%j.log
+#SBATCH --error=/export/home/acs/stud/t/tudor.farcasanu/SSL_research/inference_experiment/logs/slurm_logs/sglang-qwen-generate-dataset-%j.err
 #SBATCH --ntasks=1
 #SBATCH --cpus-per-task=64
 #SBATCH --mem=300G
@@ -29,8 +29,8 @@ mkdir -p "$(dirname "$EVAL_LOG_FILE")"
 cd "$WORK_DIR"
 echo "Working directory: $(pwd)"
 echo "Job ID: $SLURM_JOB_ID"
-echo "SLURM Output Log: $SLURM_LOG_DIR/sglang-qwen-eval-$SLURM_JOB_ID.log"
-echo "SLURM Error Log: $SLURM_LOG_DIR/sglang-qwen-eval-$SLURM_JOB_ID.err"
+echo "SLURM Output Log: $SLURM_LOG_DIR/sglang-qwen-generate-dataset-$SLURM_JOB_ID.log"
+echo "SLURM Error Log: $SLURM_LOG_DIR/sglang-qwen-generate-dataset-$SLURM_JOB_ID.err"
 echo "SGLang Server Log: $SGLANG_LOG_FILE"
 echo "Evaluation Script Log: $EVAL_LOG_FILE"
 
