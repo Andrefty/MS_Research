@@ -61,6 +61,8 @@ pip install flash-attn --no-build-isolation
 # Install other utilities
 pip install ninja
 pip install packaging
+pip install openai
+pip install scikit-learn
 
 echo ""
 echo "=============================================="
