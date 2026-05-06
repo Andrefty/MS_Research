@@ -56,7 +56,7 @@ export WANDB_RUN_NAME="n_16_lr_1e-6_$(date +%Y%m%d_%H%M)"
 export WANDB_API_KEY="${WANDB_API_KEY:-}"
 
 # Completion logging for debugging (logs all completions during training)
-export GRPO_COMPLETION_LOG="$OUTPUT_DIR/verl_completions_debug.jsonl"
+# export GRPO_COMPLETION_LOG="$OUTPUT_DIR/verl_completions_debug.jsonl"
 
 # VERL output directories
 export VERL_VAL_OUTPUT_DIR="$OUTPUT_DIR/val_output"
