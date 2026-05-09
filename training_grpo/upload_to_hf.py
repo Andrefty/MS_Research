@@ -2,8 +2,7 @@
 """
 Upload GRPO checkpoints to HuggingFace: Andrefty/qwen3-4b-vuln-grpo-verl
 
-Commit 1: global_step_100 model weights (best checkpoint by val accuracy)
-Commit 2: global_step_209 model weights + train_rollout + val_output + debug jsonl
+global_step_<step> model weights + train_rollout + val_output + eval results + README.md + (optional) debug jsonl
 """
 
 import argparse
@@ -47,7 +46,8 @@ def upload_commit(api, repo_id, operations, commit_msg):
 
 def main():
     parser = argparse.ArgumentParser()
-    parser.add_argument("--commit", choices=["step100", "step209", "both"], default="both")
+    parser.add_argument("--step", type=int, default=209, help="Global step of the checkpoint to upload")
+    parser.add_argument("-m", "--message", type=str, help="Override commit message")
     parser.add_argument("--dry-run", action="store_true")
     args = parser.parse_args()
 
@@ -60,45 +60,42 @@ def main():
     except Exception as e:
         print(f"Repo exists or error: {e}")
 
-    # ── COMMIT 1: step 100 ──────────────────────────────────────────────
-    if args.commit in ("step100", "both"):
-        step100_dir = BASE_DIR / "global_step_100"
-        model_files = get_model_files(step100_dir)
+    # ── COMMIT: step + rollouts + eval results ──────────────────────
+    step_dir = BASE_DIR / f"global_step_{args.step}"
+    model_files = get_model_files(step_dir)
+    rollout_files = get_rollout_files(BASE_DIR / "train_rollout", "train_rollout")
+    val_files = get_rollout_files(BASE_DIR / "val_output", "val_output")
+    
+    all_files = model_files + rollout_files + val_files
+    
+    debug_file = BASE_DIR / "verl_completions_debug.jsonl"
+    if debug_file.exists():
+        all_files.append((debug_file, "verl_completions_debug.jsonl"))
         
-        print(f"\n=== Commit 1: step 100 model ({len(model_files)} files) ===")
-        for local, repo in model_files:
-            print(f"  {repo} ({os.path.getsize(local)/1e9:.2f} GB)")
+    readme_file = step_dir / "README.md"
+    # if not readme_file.exists():
+    #     readme_file = BASE_DIR / "README.md"
+    if readme_file.exists():
+        all_files.append((readme_file, "README.md"))
         
-        if not args.dry_run:
-            operations = [
-                CommitOperationAdd(path_in_repo=repo_path, path_or_fileobj=str(local_path))
-                for local_path, repo_path in model_files
-            ]
-            upload_commit(api, REPO_ID, operations,
-                "Add step 100 checkpoint (best val accuracy: 89.9%, LR=5e-6, n=16)")
-
-    # ── COMMIT 2: step 209 + rollouts ───────────────────────────────────
-    if args.commit in ("step209", "both"):
-        step209_dir = BASE_DIR / "global_step_209"
-        model_files = get_model_files(step209_dir)
-        rollout_files = get_rollout_files(BASE_DIR / "train_rollout", "train_rollout")
-        val_files = get_rollout_files(BASE_DIR / "val_output", "val_output")
-        debug_file = BASE_DIR / "verl_completions_debug.jsonl"
-        
-        all_files = model_files + rollout_files + val_files + [(debug_file, "verl_completions_debug.jsonl")]
-        
-        print(f"\n=== Commit 2: step 209 model + rollouts ({len(all_files)} files) ===")
-        for local, repo in all_files:
-            size = os.path.getsize(local) / 1e6
-            print(f"  {repo} ({size:.1f} MB)")
-        
-        if not args.dry_run:
-            operations = [
-                CommitOperationAdd(path_in_repo=repo_path, path_or_fileobj=str(local_path))
-                for local_path, repo_path in all_files
-            ]
-            upload_commit(api, REPO_ID, operations,
-                "Add step 209 final checkpoint + train_rollout + val_output + debug completions")
+    eval_results_dir = step_dir / "grpo_qwen3_4b_eval_results"
+    if eval_results_dir.exists():
+        for f in eval_results_dir.rglob('*'):
+            if f.is_file():
+                all_files.append((f, f"grpo_qwen3_4b_eval_results/{f.relative_to(eval_results_dir)}"))
+    
+    print(f"\n=== Uploading step {args.step} model + rollouts + eval ({len(all_files)} files) ===")
+    for local, repo in all_files:
+        size = os.path.getsize(local) / 1e6
+        print(f"  {repo} ({size:.1f} MB)")
+    
+    if not args.dry_run:
+        operations = [
+            CommitOperationAdd(path_in_repo=repo_path, path_or_fileobj=str(local_path))
+            for local_path, repo_path in all_files
+        ]
+        commit_msg = args.message if args.message else f"Checkpoint step {args.step} upload"
+        upload_commit(api, REPO_ID, operations, commit_msg)
 
     print("\n🎉 Upload complete!" if not args.dry_run else "\n✅ Dry run complete.")
 
