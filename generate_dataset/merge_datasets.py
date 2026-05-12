@@ -641,10 +641,12 @@ def build_commit_metadata_pool(samples: list[dict]) -> dict:
             if cve and str(cve).strip().lower() not in ['none', 'null', '']:
                 p['cve_set'].add(str(cve).strip())
         
-        # Merge CWEs
+        # Merge CWEs (filter out NVD placeholders that carry no signal)
         for cwe in (s.get('cwe') or []):
-            if cwe and str(cwe).strip().lower() not in ['none', 'null', '']:
-                p['cwe_set'].add(str(cwe).strip())
+            cwe_str = str(cwe).strip()
+            if (cwe_str and cwe_str.lower() not in ['none', 'null', '']
+                    and cwe_str not in ['NVD-CWE-noinfo', 'NVD-CWE-Other']):
+                p['cwe_set'].add(cwe_str)
         
         # cve_desc: prefer PV, fall back to SE
         desc = s.get('cve_desc')
