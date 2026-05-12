@@ -237,8 +237,8 @@ def get_already_processed_ids(output_file_path):
                 for line in f:
                     if line.strip():
                         data = json.loads(line)
-                        # Create unique key for each sample (commit_id + is_vulnerable)
-                        key = f"{data.get('commit_id')}_{data.get('is_vulnerable')}"
+                        # Composite key: commit_id + func_name + vuln_hash + is_vulnerable
+                        key = f"{data.get('commit_id')}_{data.get('func_name', '')}_{data.get('vuln_hash', '')}_{data.get('is_vulnerable')}"
                         processed_ids.add(key)
             print(f"Found {len(processed_ids)} already processed samples in existing output file.")
         except Exception as e:
@@ -304,6 +304,8 @@ def process_single_request(client, args, prompt, sample, is_vulnerable,
         
         return {
             "commit_id": sample['commit_id'],
+            "func_name": sample.get('func_name', ''),
+            "vuln_hash": sample.get('vuln_hash', ''),
             "source": sample.get('source'),
             "is_vulnerable": is_vulnerable,
             "code": sample['vuln_func'] if is_vulnerable else sample['patched_func'],
@@ -316,6 +318,8 @@ def process_single_request(client, args, prompt, sample, is_vulnerable,
     except Exception as e:
         return {
             "commit_id": sample['commit_id'],
+            "func_name": sample.get('func_name', ''),
+            "vuln_hash": sample.get('vuln_hash', ''),
             "source": sample.get('source'),
             "is_vulnerable": is_vulnerable,
             "code": sample['vuln_func'] if is_vulnerable else sample['patched_func'],
@@ -434,9 +438,11 @@ def main():
     
     for sample in all_samples:
         commit_id = sample['commit_id']
+        func_name = sample.get('func_name', '')
+        vuln_hash = sample.get('vuln_hash', '')
         
         # Check vulnerable version
-        vuln_key = f"{commit_id}_True"
+        vuln_key = f"{commit_id}_{func_name}_{vuln_hash}_True"
         if vuln_key not in already_processed_ids:
             req = prepare_request(sample, True, tokenizer_obj, is_hf_tokenizer,
                                   total_model_capacity, args.max_gen_length)
@@ -446,7 +452,7 @@ def main():
                 skipped_due_to_token_limit += 1
         
         # Check patched version
-        patched_key = f"{commit_id}_False"
+        patched_key = f"{commit_id}_{func_name}_{vuln_hash}_False"
         if patched_key not in already_processed_ids:
             req = prepare_request(sample, False, tokenizer_obj, is_hf_tokenizer,
                                   total_model_capacity, args.max_gen_length)

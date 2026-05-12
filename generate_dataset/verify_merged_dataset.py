@@ -155,11 +155,44 @@ def main():
     
     # Check new fields
     has_func_name = sum(1 for s in samples if s.get('func_name'))
-    has_filepath = sum(1 for s in samples if s.get('filepath'))
+    has_vuln_hash = sum(1 for s in samples if s.get('vuln_hash'))
+    has_filepath = sum(1 for s in samples if s.get('filepath') and s['filepath'] != 'None')
+    has_cve_desc = sum(1 for s in samples if s.get('cve_desc'))
+    has_commit_msg = sum(1 for s in samples if s.get('commit_message'))
+    has_cve = sum(1 for s in samples if s.get('cve'))
+    has_cwe = sum(1 for s in samples if s.get('cwe'))
     print(f"  Samples with func_name: {has_func_name}")
+    print(f"  Samples with vuln_hash: {has_vuln_hash}")
     print(f"  Samples with filepath: {has_filepath}")
+    print(f"  Samples with cve: {has_cve}")
+    print(f"  Samples with cwe: {has_cwe}")
+    print(f"  Samples with cve_desc: {has_cve_desc}")
+    print(f"  Samples with commit_message: {has_commit_msg}")
     
-    return 0 if not total_issues else 1
+    # Check for duplicate (commit_id, func_name, vuln_hash) keys
+    print(f"\n--- Deduplication key check ---")
+    key_counts = Counter()
+    for s in samples:
+        key = (s.get('commit_id', '').lower(), s.get('func_name', ''), s.get('vuln_hash', ''))
+        key_counts[key] += 1
+    dup_keys = {k: v for k, v in key_counts.items() if v > 1}
+    if dup_keys:
+        print(f"  ⚠ WARNING: {len(dup_keys)} duplicate (commit_id, func_name, vuln_hash) keys!")
+        if args.verbose:
+            for k, v in list(dup_keys.items())[:5]:
+                print(f"    {k}: {v} entries")
+    else:
+        print(f"  ✅ No duplicate (commit_id, func_name, vuln_hash) keys")
+    
+    # Check CVE/CWE are lists
+    cve_not_list = sum(1 for s in samples if s.get('cve') is not None and not isinstance(s['cve'], list))
+    cwe_not_list = sum(1 for s in samples if s.get('cwe') is not None and not isinstance(s['cwe'], list))
+    if cve_not_list or cwe_not_list:
+        print(f"  ⚠ CVE not-list: {cve_not_list}, CWE not-list: {cwe_not_list}")
+    else:
+        print(f"  ✅ All CVE/CWE fields are lists")
+    
+    return 0 if (not total_issues and not dup_keys) else 1
 
 
 if __name__ == "__main__":

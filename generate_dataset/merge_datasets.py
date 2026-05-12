@@ -14,12 +14,82 @@ import json
 import argparse
 import os
 import difflib
+import hashlib
 import re
 from glob import glob
-from collections import defaultdict
+from collections import defaultdict, Counter
 from typing import Optional
 import pandas as pd
 from tqdm import tqdm
+
+
+# --- Utility functions for function-level deduplication ---
+
+def normalize_code(code: str) -> str:
+    """Normalize code for hashing AND diffing: strip each line, remove empty, lowercase."""
+    lines = code.splitlines()
+    stripped = [l.strip() for l in lines if l.strip()]
+    return '\n'.join(stripped).lower()
+
+
+def compute_vuln_hash(code: str) -> str:
+    """Compute SHA-256 hash of normalized code."""
+    return hashlib.sha256(normalize_code(code).encode()).hexdigest()
+
+
+def extract_func_name_from_body(func_body: str) -> str:
+    """
+    Extract function name from C/C++ function body.
+    Parses the first line looking for the function name before '('.
+    """
+    first_line = func_body.split('\n')[0].strip()
+    m = re.match(r'(?:static\s+)?(?:inline\s+)?(?:const\s+)?(?:\w+[\s*]+)*?(\w+)\s*\(', first_line)
+    if m:
+        name = m.group(1)
+        # Filter out keywords that could be falsely matched
+        if name not in ['if', 'else', 'while', 'for', 'switch', 'return', 'sizeof', 'typeof', 'do']:
+            return name
+    return first_line[:40]
+
+
+def diff_file_smart(file_a: str, file_b: str, proj_a: str = '', proj_b: str = '') -> bool:
+    """
+    Smart file comparison for deduplication.
+    
+    Handles:
+    - PrimeVul storing just filenames (e.g. 'tx.c') vs SecVulEval full paths
+    - Same basename but different directories (arch/x86/mm/fault.c vs arch/mips/mm/fault.c)
+    - Fork detection: same path but different project = different file
+    
+    Returns True if files are DIFFERENT, False if same or can't tell.
+    """
+    fa = file_a if file_a and str(file_a) != 'None' else ''
+    fb = file_b if file_b and str(file_b) != 'None' else ''
+    if fa == '' or fb == '':
+        return False  # Can't tell → treat as same
+    # If one is just a basename (no '/'), fall back to basename comparison
+    if '/' not in fa or '/' not in fb:
+        return fa.split('/')[-1] != fb.split('/')[-1]
+    # Both have directory structure → compare full paths
+    # But also check: same path + different project = fork (e.g. iortcw vs OpenJK)
+    if fa == fb and proj_a and proj_b and proj_a != proj_b:
+        return True  # Same path, different project → fork
+    return fa != fb
+
+
+def compute_normalized_diff(code_a: str, code_b: str) -> tuple[int, int, float]:
+    """
+    Compute diff metrics on NORMALIZED code to avoid whitespace-only false positives.
+    
+    Returns (added, removed, similarity).
+    """
+    a_norm = normalize_code(code_a).splitlines()
+    b_norm = normalize_code(code_b).splitlines()
+    diff = list(difflib.unified_diff(a_norm, b_norm, lineterm=''))
+    added = sum(1 for d in diff if d.startswith('+') and not d.startswith('+++'))
+    removed = sum(1 for d in diff if d.startswith('-') and not d.startswith('---'))
+    sim = difflib.SequenceMatcher(None, '\n'.join(a_norm), '\n'.join(b_norm)).ratio()
+    return added, removed, sim
 
 
 # --- PrimeVul Loading ---
@@ -57,7 +127,12 @@ def extract_changed_lines_difflib(vuln_func: str, patched_func: str) -> tuple[li
 
 
 def load_primevul(path: str) -> list[dict]:
-    """Load PrimeVul paired dataset and transform to unified schema."""
+    """
+    Load PrimeVul paired dataset and transform to unified schema.
+    
+    Handles multi-pair commits: groups by func_name within each commit,
+    then pairs vuln↔patched by best difflib similarity.
+    """
     samples = []
     
     # Load all samples
@@ -72,45 +147,109 @@ def load_primevul(path: str) -> list[dict]:
     for sample in raw_samples:
         by_commit[sample['commit_id']].append(sample)
     
-    # Process pairs
-    for commit_id, items in tqdm(by_commit.items(), desc="Processing PrimeVul"):
-        if len(items) != 2:
-            continue
-        
-        targets = [item['target'] for item in items]
-        if not (targets.count(0) == 1 and targets.count(1) == 1):
-            continue
-        
-        vuln_sample = next(item for item in items if item['target'] == 1)
-        patched_sample = next(item for item in items if item['target'] == 0)
-        
-        # Extract line changes
-        deleted_lines, added_lines = extract_changed_lines_difflib(
-            vuln_sample['func'], patched_sample['func']
-        )
-        
-        # Get project from project_url if available
-        project = vuln_sample.get('project', '')
-        project_url = vuln_sample.get('project_url', '')
-        
-        samples.append({
-            "source": "primevul",
-            "pair_id": f"primevul_{project}_{commit_id}",
-            "commit_id": commit_id,
-            "project": project,
-            "project_url": project_url,
-            "func_name": "",  # PrimeVul doesn't have func_name; could be extracted from func body
-            "filepath": vuln_sample.get('file_name', ''),
-            "vuln_func": vuln_sample['func'],
-            "patched_func": patched_sample['func'],
-            "cve": vuln_sample.get('cve'),
-            "cve_desc": vuln_sample.get('cve_desc'),
-            "cwe": vuln_sample.get('cwe') if isinstance(vuln_sample.get('cwe'), list) else [vuln_sample.get('cwe')] if vuln_sample.get('cwe') else None,
-            "deleted_lines": deleted_lines,
-            "added_lines": added_lines,
-            "source_row_idx": vuln_sample.get('idx')
-        })
+    skipped_commits = 0
+    multi_func_commits = 0
     
+    for commit_id, items in tqdm(by_commit.items(), desc="Processing PrimeVul"):
+        # Separate vuln and patched
+        vuln_items = [it for it in items if it['target'] == 1]
+        patched_items = [it for it in items if it['target'] == 0]
+        
+        if not vuln_items or not patched_items:
+            skipped_commits += 1
+            continue
+        
+        # Group by extracted func_name
+        vuln_by_func = defaultdict(list)
+        for it in vuln_items:
+            fn = extract_func_name_from_body(it['func'])
+            vuln_by_func[fn].append(it)
+        
+        patched_by_func = defaultdict(list)
+        for it in patched_items:
+            fn = extract_func_name_from_body(it['func'])
+            patched_by_func[fn].append(it)
+        
+        if len(vuln_by_func) > 1 or len(patched_by_func) > 1:
+            multi_func_commits += 1
+        
+        # For each func_name that appears in BOTH vuln and patched, pair 1:1
+        all_func_names = set(vuln_by_func.keys()) | set(patched_by_func.keys())
+        
+        for fn in all_func_names:
+            fn_vulns = vuln_by_func.get(fn, [])
+            fn_patches = patched_by_func.get(fn, [])
+            
+            if not fn_vulns or not fn_patches:
+                continue
+            
+            # Pair by best similarity (greedy 1:1 matching)
+            used_patch = set()
+            pairs = []
+            for vi in fn_vulns:
+                best_sim = -1
+                best_pi_idx = -1
+                for pi_idx, pi in enumerate(fn_patches):
+                    if pi_idx in used_patch:
+                        continue
+                    sim = difflib.SequenceMatcher(None, vi['func'], pi['func']).ratio()
+                    if sim > best_sim:
+                        best_sim = sim
+                        best_pi_idx = pi_idx
+                if best_pi_idx >= 0:
+                    used_patch.add(best_pi_idx)
+                    pairs.append((vi, fn_patches[best_pi_idx]))
+            
+            for vuln_sample, patched_sample in pairs:
+                func_name = extract_func_name_from_body(vuln_sample['func'])
+                
+                # Extract line changes
+                deleted_lines, added_lines = extract_changed_lines_difflib(
+                    vuln_sample['func'], patched_sample['func']
+                )
+                
+                project = vuln_sample.get('project', '')
+                project_url = vuln_sample.get('project_url', '')
+                filepath = vuln_sample.get('file_name', '')
+                
+                # Commit message
+                cm = vuln_sample.get('commit_message', '')
+                commit_message = cm if cm and str(cm).strip().lower() not in ['none', 'null', ''] else ''
+                
+                # CVE/CWE as lists for later merging
+                cve_raw = vuln_sample.get('cve')
+                cve_list = [cve_raw] if cve_raw and str(cve_raw).strip().lower() not in ['none', 'null', ''] else []
+                
+                cwe_raw = vuln_sample.get('cwe')
+                if isinstance(cwe_raw, list):
+                    cwe_list = [c for c in cwe_raw if c and str(c).strip().lower() not in ['none', 'null', '']]
+                elif cwe_raw and str(cwe_raw).strip().lower() not in ['none', 'null', '']:
+                    cwe_list = [cwe_raw]
+                else:
+                    cwe_list = []
+                
+                samples.append({
+                    "source": "primevul",
+                    "pair_id": f"primevul_{project}_{commit_id}_{func_name}",
+                    "commit_id": commit_id,
+                    "project": project,
+                    "project_url": project_url,
+                    "func_name": func_name,
+                    "filepath": filepath,
+                    "vuln_hash": compute_vuln_hash(vuln_sample['func']),
+                    "vuln_func": vuln_sample['func'],
+                    "patched_func": patched_sample['func'],
+                    "cve": cve_list,
+                    "cve_desc": vuln_sample.get('cve_desc'),
+                    "cwe": cwe_list,
+                    "commit_message": commit_message,
+                    "deleted_lines": deleted_lines,
+                    "added_lines": added_lines,
+                    "source_row_idx": vuln_sample.get('idx')
+                })
+    
+    print(f"  Multi-function commits: {multi_func_commits}")
+    print(f"  Skipped (no vuln or no patched): {skipped_commits}")
     return samples
 
 
@@ -168,23 +307,27 @@ def load_sven(paths: list[str]) -> list[dict]:
             project, commit_id = parse_sven_commit_link(row['commit_link'])
             deleted_lines, added_lines = extract_sven_line_changes(row['line_changes'])
             
-            # Map vul_type to CWE format
+            func_name = row.get('func_name', '')
+            
+            # Map vul_type to CWE format (as list)
             vul_type = row.get('vul_type', '')
-            cwe = [vul_type.upper()] if vul_type else None
+            cwe_list = [vul_type.upper()] if vul_type else []
             
             samples.append({
                 "source": "sven",
-                "pair_id": f"sven_{project}_{commit_id}",
+                "pair_id": f"sven_{project}_{commit_id}_{func_name}",
                 "commit_id": commit_id,
                 "project": project,
                 "project_url": f"https://{row['commit_link'].split('/commit/')[0]}" if '/commit/' in row['commit_link'] else None,
-                "func_name": row.get('func_name', ''),
+                "func_name": func_name,
                 "filepath": row.get('file_name', ''),
+                "vuln_hash": compute_vuln_hash(row['func_src_before']),
                 "vuln_func": row['func_src_before'],
                 "patched_func": row['func_src_after'],
-                "cve": None,  # SVEN doesn't have CVE
+                "cve": [],  # SVEN doesn't have CVE
                 "cve_desc": None,
-                "cwe": cwe,
+                "cwe": cwe_list,
+                "commit_message": '',  # SVEN doesn't have commit messages
                 "deleted_lines": deleted_lines,
                 "added_lines": added_lines,
                 "source_row_idx": idx
@@ -412,25 +555,38 @@ def load_secvuleval(paths: list[str]) -> list[dict]:
                 if hasattr(explanations, 'tolist'):
                     explanations = explanations.tolist()
                 if explanations is not None and len(explanations) > 0:
-                    cve_desc = ' '.join(str(e) for e in explanations)
+                    desc_text = ' '.join(str(e) for e in explanations).strip()
+                    # Only use if it has actual content (>5 chars, not just whitespace)
+                    if len(desc_text) > 5:
+                        cve_desc = desc_text
             
-            # func_name and filepath for traceability (and future multi-file dedup)
+            # func_name and filepath for function-level dedup
             func_name = vuln_row.get('func_name', '')
             filepath = vuln_row.get('filepath', '')
             
+            # Commit message — SecVulEval has commit_message field
+            cm = vuln_row.get('commit_message', '')
+            if isinstance(cm, float) or cm is None:
+                commit_message = ''
+            else:
+                cm = str(cm).strip()
+                commit_message = cm if cm.lower() not in ['none', 'null', ''] else ''
+            
             samples.append({
                 "source": "secvuleval",
-                "pair_id": f"secvuleval_{project}_{commit_id}",
+                "pair_id": f"secvuleval_{project}_{commit_id}_{func_name}",
                 "commit_id": commit_id,
                 "project": project,
                 "project_url": vuln_row.get('project_url', ''),
                 "func_name": func_name,
                 "filepath": filepath,
+                "vuln_hash": compute_vuln_hash(vuln_func),
                 "vuln_func": vuln_func,
                 "patched_func": patched_func,
-                "cve": cve_list[0] if len(cve_list) > 0 else None,
+                "cve": list(cve_list),
                 "cve_desc": cve_desc,
-                "cwe": list(cwe_list) if len(cwe_list) > 0 else None,
+                "cwe": list(cwe_list),
+                "commit_message": commit_message,
                 "deleted_lines": deleted_lines,
                 "added_lines": added_lines,
                 "source_row_idx": int(vuln_row['idx'])
@@ -452,63 +608,228 @@ def load_secvuleval(paths: list[str]) -> list[dict]:
     return samples
 
 
-# --- Deduplication ---
+# --- Metadata Pooling and Function-Level Deduplication ---
 
-def deduplicate_by_commit_id(samples: list[dict]) -> list[dict]:
+def build_commit_metadata_pool(samples: list[dict]) -> dict:
     """
-    Deduplicate samples by commit_id only (commit hashes are globally unique).
-    Prefer SVEN (most accurate) > PrimeVul (has CVE desc) > SecVulEval.
-    BUT: Skip samples where vuln_func == patched_func (data quality issue).
-    Also merges CVE description from any source if the preferred source lacks it.
+    Build a commit-level metadata pool from ALL sources.
+    
+    For each commit_id, merges:
+    - cve: union of all CVE IDs from all sources
+    - cwe: union of all CWE IDs from all sources
+    - cve_desc: prefer PrimeVul; fall back to SecVulEval if >5 chars
+    - commit_message: prefer longest non-empty message
+    
+    Returns dict mapping commit_id -> {cve, cwe, cve_desc, commit_message}
     """
-    seen = {}
-    # SVEN is most accurate, prioritize it
-    source_priority = {"sven": 0, "primevul": 1, "secvuleval": 2}
+    pool = defaultdict(lambda: {
+        'cve_set': set(),
+        'cwe_set': set(),
+        'cve_desc': None,
+        'commit_message': '',
+    })
+    
+    # Priority for cve_desc: PV > SE > SVEN
+    desc_priority = {'primevul': 0, 'secvuleval': 1, 'sven': 2}
+    
+    for s in samples:
+        cid = s['commit_id'].lower()
+        p = pool[cid]
+        
+        # Merge CVEs
+        for cve in (s.get('cve') or []):
+            if cve and str(cve).strip().lower() not in ['none', 'null', '']:
+                p['cve_set'].add(str(cve).strip())
+        
+        # Merge CWEs
+        for cwe in (s.get('cwe') or []):
+            if cwe and str(cwe).strip().lower() not in ['none', 'null', '']:
+                p['cwe_set'].add(str(cwe).strip())
+        
+        # cve_desc: prefer PV, fall back to SE
+        desc = s.get('cve_desc')
+        if desc and str(desc).strip().lower() not in ['none', 'null', ''] and len(str(desc).strip()) > 5:
+            src_prio = desc_priority.get(s['source'], 99)
+            if p['cve_desc'] is None:
+                p['cve_desc'] = str(desc).strip()
+                p['_desc_prio'] = src_prio
+            elif src_prio < p.get('_desc_prio', 99):
+                p['cve_desc'] = str(desc).strip()
+                p['_desc_prio'] = src_prio
+        
+        # commit_message: keep longest
+        msg = s.get('commit_message', '')
+        if msg and not isinstance(msg, float):
+            msg = str(msg)
+            if len(msg) > len(p['commit_message']):
+                p['commit_message'] = msg
+    
+    # Convert sets to sorted lists
+    result = {}
+    for cid, p in pool.items():
+        result[cid] = {
+            'cve': sorted(p['cve_set']),
+            'cwe': sorted(p['cwe_set']),
+            'cve_desc': p['cve_desc'],
+            'commit_message': p['commit_message'],
+        }
+    return result
+
+
+def deduplicate_by_function(samples: list[dict]) -> list[dict]:
+    """
+    Function-level deduplication with validated 3-tier conflict resolution.
+    
+    Strategy (validated against 457 conflict pairs, 0 wrong collapses):
+    1. Group by (commit_id, func_name)
+    2. Within each group, entries with same vuln_hash = true duplicates → keep best by priority
+    3. Entries with different vuln_hash = potential conflicts → resolve pairwise:
+       a. one_contains (removed==0):
+          - diff_file → keep both (genuinely different)
+          - same/unknown file → collapse (keep bigger)
+       b. sim > 0.7 OR added_ratio >= 2:
+          - diff_file → keep both (genuinely different)
+          - same/unknown file → collapse (keep version with more added lines)
+       c. low similarity AND low added_ratio:
+          → keep both (conservatively assume genuinely different)
+    """
+    source_priority = {"sven": 0, "secvuleval": 1, "primevul": 2}
     
     def is_valid_pair(sample):
-        """Check if sample has different vuln and patched functions."""
         return sample['vuln_func'] != sample['patched_func']
     
-    for sample in samples:
-        key = sample['commit_id'].lower()
-        
-        if key not in seen:
-            seen[key] = sample
-        else:
-            existing = seen[key]
-            existing_priority = source_priority.get(existing['source'], 99)
-            sample_priority = source_priority.get(sample['source'], 99)
+    def pick_best(entries):
+        """Pick best entry from a list of same-hash entries by priority."""
+        best = entries[0]
+        for e in entries[1:]:
+            e_valid = is_valid_pair(e)
+            b_valid = is_valid_pair(best)
+            e_prio = source_priority.get(e['source'], 99)
+            b_prio = source_priority.get(best['source'], 99)
             
-            existing_valid = is_valid_pair(existing)
-            sample_valid = is_valid_pair(sample)
-            
-            # Prefer valid samples (vuln != patched) over invalid ones
-            should_replace = False
-            if sample_valid and not existing_valid:
-                # New sample is valid, existing is not - replace
-                should_replace = True
-            elif not sample_valid and existing_valid:
-                # Existing is valid, new is not - keep existing
-                should_replace = False
-            elif sample_priority < existing_priority:
-                # Both valid or both invalid - use source priority
-                should_replace = True
-            
-            if should_replace:
-                # Replace but try to keep cve_desc from existing
-                if not sample.get('cve_desc') and existing.get('cve_desc'):
-                    sample['cve_desc'] = existing['cve_desc']
-                if not sample.get('cve') and existing.get('cve'):
-                    sample['cve'] = existing['cve']
-                seen[key] = sample
-            else:
-                # Keep existing, but try to get cve_desc from new sample if missing
-                if not existing.get('cve_desc') and sample.get('cve_desc'):
-                    existing['cve_desc'] = sample['cve_desc']
-                if not existing.get('cve') and sample.get('cve'):
-                    existing['cve'] = sample['cve']
+            if e_valid and not b_valid:
+                best = e
+            elif not e_valid and b_valid:
+                pass
+            elif e_prio < b_prio:
+                best = e
+        return best
     
-    return list(seen.values())
+    def collapse_pair(a, b):
+        """
+        Collapse two entries into one. A is shorter, B is longer.
+        Returns the winning entry.
+        """
+        added, removed, sim = compute_normalized_diff(a['vuln_func'], b['vuln_func'])
+        one_contains = removed == 0
+        
+        if one_contains:
+            # B wholly contains A → keep B
+            return b
+        
+        # Keep version with more added lines
+        if added > removed:
+            return b
+        else:
+            # Tie-break: prefer entry with commit_message, then priority
+            a_has_msg = bool(a.get('commit_message', '').strip())
+            b_has_msg = bool(b.get('commit_message', '').strip())
+            if b_has_msg and not a_has_msg:
+                return b
+            elif a_has_msg and not b_has_msg:
+                return a
+            # Final tie-break: source priority
+            a_prio = source_priority.get(a['source'], 99)
+            b_prio = source_priority.get(b['source'], 99)
+            return a if a_prio <= b_prio else b
+    
+    # Step 1: Group by (commit_id, func_name)
+    by_cf = defaultdict(list)
+    for s in samples:
+        key = (s['commit_id'].lower(), s['func_name'])
+        by_cf[key].append(s)
+    
+    survivors = []
+    stats = Counter()
+    
+    for (cid, fname), group in by_cf.items():
+        # Step 2: Sub-group by vuln_hash
+        by_hash = defaultdict(list)
+        for e in group:
+            by_hash[e['vuln_hash']].append(e)
+        
+        if len(by_hash) == 1:
+            # All same hash → true duplicate → pick best
+            stats['same_hash_dedup'] += len(group) - 1
+            survivors.append(pick_best(group))
+            continue
+        
+        # Step 3: Multiple hashes → pairwise conflict resolution
+        # Start with all variants as candidates
+        variants = [pick_best(entries) for entries in by_hash.values()]
+        
+        # Iteratively collapse pairs
+        changed = True
+        while changed and len(variants) > 1:
+            changed = False
+            new_variants = []
+            collapsed_indices = set()
+            
+            for i in range(len(variants)):
+                if i in collapsed_indices:
+                    continue
+                a = variants[i]
+                was_collapsed = False
+                
+                for j in range(i + 1, len(variants)):
+                    if j in collapsed_indices:
+                        continue
+                    b = variants[j]
+                    
+                    # Ensure a is shorter
+                    if len(a['vuln_func'].splitlines()) > len(b['vuln_func'].splitlines()):
+                        a, b = b, a
+                    
+                    added, removed, sim = compute_normalized_diff(a['vuln_func'], b['vuln_func'])
+                    one_contains = removed == 0
+                    added_ratio = added / removed if removed > 0 else float('inf')
+                    
+                    diff_file = diff_file_smart(
+                        a.get('filepath', ''), b.get('filepath', ''),
+                        a.get('project', ''), b.get('project', '')
+                    )
+                    
+                    should_collapse = False
+                    if one_contains and not diff_file:
+                        should_collapse = True
+                    elif (sim > 0.7 or added_ratio >= 2) and not diff_file:
+                        should_collapse = True
+                    
+                    if should_collapse:
+                        winner = collapse_pair(a, b)
+                        new_variants.append(winner)
+                        collapsed_indices.add(i)
+                        collapsed_indices.add(j)
+                        was_collapsed = True
+                        changed = True
+                        stats['conflicts_collapsed'] += 1
+                        break
+                
+                if not was_collapsed and i not in collapsed_indices:
+                    new_variants.append(variants[i])
+            
+            variants = new_variants
+        
+        survivors.extend(variants)
+        if len(by_hash) > 1:
+            stats['conflicts_kept_both'] += len(variants)
+    
+    print(f"  Function-level dedup stats:")
+    print(f"    Same-hash dedup removed: {stats['same_hash_dedup']}")
+    print(f"    Different-hash conflicts collapsed: {stats['conflicts_collapsed']}")
+    print(f"    Different-hash entries kept: {stats['conflicts_kept_both']}")
+    
+    return survivors
 
 
 # --- Main ---
@@ -550,11 +871,39 @@ def main():
     all_samples = primevul_samples + sven_samples + secvuleval_samples
     print(f"\nTotal before dedup: {len(all_samples)}")
     
+    # Build commit-level metadata pool (BEFORE dedup, using ALL sources)
+    print("\nBuilding commit-level metadata pool...")
+    metadata_pool = build_commit_metadata_pool(all_samples)
+    print(f"  Pooled metadata for {len(metadata_pool)} unique commits")
+    
+    # Count metadata coverage
+    pool_has_cve = sum(1 for v in metadata_pool.values() if v['cve'])
+    pool_has_cwe = sum(1 for v in metadata_pool.values() if v['cwe'])
+    pool_has_desc = sum(1 for v in metadata_pool.values() if v['cve_desc'])
+    pool_has_msg = sum(1 for v in metadata_pool.values() if v['commit_message'])
+    print(f"  Commits with CVE: {pool_has_cve}")
+    print(f"  Commits with CWE: {pool_has_cwe}")
+    print(f"  Commits with cve_desc: {pool_has_desc}")
+    print(f"  Commits with commit_message: {pool_has_msg}")
+    
     # Deduplicate
     if not args.skip_dedup:
-        print("\nDeduplicating by commit_id...")
-        all_samples = deduplicate_by_commit_id(all_samples)
+        print("\nDeduplicating by (commit_id, func_name, vuln_hash)...")
+        all_samples = deduplicate_by_function(all_samples)
         print(f"Total after dedup: {len(all_samples)}")
+    
+    # Enrich ALL surviving entries with pooled metadata
+    print("\nEnriching entries with pooled commit metadata...")
+    for s in all_samples:
+        cid = s['commit_id'].lower()
+        if cid in metadata_pool:
+            pooled = metadata_pool[cid]
+            s['cve'] = pooled['cve']
+            s['cwe'] = pooled['cwe']
+            if pooled['cve_desc']:
+                s['cve_desc'] = pooled['cve_desc']
+            if pooled['commit_message'] and len(pooled['commit_message']) > len(s.get('commit_message', '')):
+                s['commit_message'] = pooled['commit_message']
     
     # Final filter: remove samples where vuln_func == patched_func (no valid source exists)
     before_filter = len(all_samples)
@@ -573,6 +922,36 @@ def main():
     for source, count in sorted(source_counts.items()):
         print(f"  {source}: {count} pairs")
     
+    # New field coverage
+    has_func_name = sum(1 for s in all_samples if s.get('func_name'))
+    has_vuln_hash = sum(1 for s in all_samples if s.get('vuln_hash'))
+    has_filepath = sum(1 for s in all_samples if s.get('filepath') and s['filepath'] != 'None')
+    has_cve_desc = sum(1 for s in all_samples if s.get('cve_desc'))
+    has_commit_msg = sum(1 for s in all_samples if s.get('commit_message'))
+    has_cve = sum(1 for s in all_samples if s.get('cve'))
+    has_cwe = sum(1 for s in all_samples if s.get('cwe'))
+    print(f"\n  Field coverage:")
+    print(f"    func_name: {has_func_name}/{len(all_samples)}")
+    print(f"    vuln_hash: {has_vuln_hash}/{len(all_samples)}")
+    print(f"    filepath:  {has_filepath}/{len(all_samples)}")
+    print(f"    cve:       {has_cve}/{len(all_samples)}")
+    print(f"    cwe:       {has_cwe}/{len(all_samples)}")
+    print(f"    cve_desc:  {has_cve_desc}/{len(all_samples)}")
+    print(f"    commit_message: {has_commit_msg}/{len(all_samples)}")
+    
+    # Check for duplicate keys
+    key_counts = Counter()
+    for s in all_samples:
+        key = (s['commit_id'].lower(), s.get('func_name', ''), s.get('vuln_hash', ''))
+        key_counts[key] += 1
+    dup_keys = {k: v for k, v in key_counts.items() if v > 1}
+    if dup_keys:
+        print(f"\n  ⚠ WARNING: {len(dup_keys)} duplicate (commit_id, func_name, vuln_hash) keys found!")
+        for k, v in list(dup_keys.items())[:5]:
+            print(f"    {k}: {v} entries")
+    else:
+        print(f"\n  ✅ No duplicate (commit_id, func_name, vuln_hash) keys")
+    
     # Write output
     print(f"\nWriting to {args.output_path}...")
     with open(args.output_path, 'w', encoding='utf-8') as f:
@@ -590,9 +969,12 @@ def main():
             sample = source_samples[0]
             print(f"\n--- {source} ---")
             print(f"  pair_id: {sample['pair_id']}")
+            print(f"  func_name: {sample.get('func_name', '')}")
+            print(f"  vuln_hash: {sample.get('vuln_hash', '')[:16]}...")
             print(f"  project: {sample['project']}")
             print(f"  cve: {sample['cve']}")
             print(f"  cwe: {sample['cwe']}")
+            print(f"  commit_message: {sample.get('commit_message', '')[:60]}..." if sample.get('commit_message') else "  commit_message: ''")
             print(f"  deleted_lines: {sample['deleted_lines'][:2]}..." if sample['deleted_lines'] else "  deleted_lines: []")
             print(f"  added_lines: {sample['added_lines'][:2]}..." if sample['added_lines'] else "  added_lines: []")
 
