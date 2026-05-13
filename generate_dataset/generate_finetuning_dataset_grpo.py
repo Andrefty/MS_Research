@@ -101,24 +101,32 @@ def build_context_section(sample):
     cwe = sample.get('cwe')
     
     # Clean up cve_desc
-    if cve_desc and cve_desc.strip().lower() in ["none", "null", "na", "n/a", ""]:
+    if cve_desc and str(cve_desc).strip().lower() in ["none", "null", "na", "n/a", ""]:
         cve_desc = None
+    
+    # Format CVE (may be list or string)
+    cve_str = None
+    if cve:
+        if isinstance(cve, list):
+            cve_str = ", ".join(str(c) for c in cve if c) if cve else None
+        else:
+            cve_str = str(cve) if str(cve).strip().lower() not in ["none", "null", ""] else None
     
     # Format CWE list
     cwe_str = None
     if cwe:
         if isinstance(cwe, list):
-            cwe_str = ", ".join(cwe)
+            cwe_str = ", ".join(str(c) for c in cwe if c) if cwe else None
         else:
-            cwe_str = str(cwe)
+            cwe_str = str(cwe) if str(cwe).strip().lower() not in ["none", "null", ""] else None
     
     context_parts = []
     
-    if cve and cve_desc:
-        context_parts.append(f"CVE: {cve}")
+    if cve_str and cve_desc:
+        context_parts.append(f"CVE: {cve_str}")
         context_parts.append(f"Description: {cve_desc}")
-    elif cve and cwe_str:
-        context_parts.append(f"CVE: {cve}")
+    elif cve_str and cwe_str:
+        context_parts.append(f"CVE: {cve_str}")
         context_parts.append(f"Vulnerability type: {cwe_str}")
     elif cwe_str:
         context_parts.append(f"Vulnerability type: {cwe_str}")
