@@ -92,6 +92,20 @@ def compute_normalized_diff(code_a: str, code_b: str) -> tuple[int, int, float]:
     return added, removed, sim
 
 
+def funcs_are_effectively_identical(vuln_func: str, patched_func: str) -> bool:
+    """
+    Check if two functions are effectively identical, ignoring trailing whitespace.
+    
+    Trailing whitespace is never semantically meaningful in any programming language
+    (even Python only cares about leading/indentation whitespace). This catches
+    entries where the only "fix" is removing trailing spaces/tabs — which are
+    dataset artifacts, not real vulnerability fixes.
+    """
+    vuln_stripped = '\n'.join(line.rstrip() for line in vuln_func.splitlines())
+    patch_stripped = '\n'.join(line.rstrip() for line in patched_func.splitlines())
+    return vuln_stripped == patch_stripped
+
+
 # --- PrimeVul Loading ---
 
 def extract_changed_lines_difflib(vuln_func: str, patched_func: str) -> tuple[list[dict], list[dict]]:
@@ -450,6 +464,9 @@ def reindex_secvuleval_lines(native_lines: list[dict], func_body: str,
         (reindexed_lines, method) where method is 'native', 'text_reindex', or 'difflib'
     """
     if not native_lines:
+        # Source had no changed_lines — use difflib if it found changes
+        if fallback_difflib_lines:
+            return fallback_difflib_lines, 'difflib'
         return native_lines, 'native'
     
     func_lines = func_body.splitlines()
@@ -907,12 +924,13 @@ def main():
             if pooled['commit_message'] and len(pooled['commit_message']) > len(s.get('commit_message', '')):
                 s['commit_message'] = pooled['commit_message']
     
-    # Final filter: remove samples where vuln_func == patched_func (no valid source exists)
+    # Final filter: remove samples where vuln_func is effectively identical to patched_func
+    # (exact match OR only trailing whitespace differences — not real fixes)
     before_filter = len(all_samples)
-    all_samples = [s for s in all_samples if s['vuln_func'] != s['patched_func']]
+    all_samples = [s for s in all_samples if not funcs_are_effectively_identical(s['vuln_func'], s['patched_func'])]
     filtered_count = before_filter - len(all_samples)
     if filtered_count > 0:
-        print(f"Removed {filtered_count} samples with identical vuln/patched functions")
+        print(f"Removed {filtered_count} samples with identical/whitespace-only vuln/patched functions")
     print(f"Final count: {len(all_samples)}")
     
     # Stats

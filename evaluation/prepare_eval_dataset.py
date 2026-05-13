@@ -25,7 +25,7 @@ from glob import glob
 # Add parent directory to path for imports
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', 'generate_dataset'))
 
-from merge_datasets import load_primevul, load_sven, deduplicate_by_function, build_commit_metadata_pool
+from merge_datasets import load_primevul, load_sven, deduplicate_by_function, build_commit_metadata_pool, funcs_are_effectively_identical
 
 
 def main():
@@ -101,12 +101,13 @@ def main():
             if pooled['commit_message'] and len(pooled['commit_message']) > len(s.get('commit_message', '')):
                 s['commit_message'] = pooled['commit_message']
     
-    # Filter samples where vuln_func == patched_func (data quality)
+    # Filter samples where vuln_func is effectively identical to patched_func
+    # (exact match OR only trailing whitespace differences — not real fixes)
     before_filter = len(all_samples)
-    all_samples = [s for s in all_samples if s['vuln_func'] != s['patched_func']]
+    all_samples = [s for s in all_samples if not funcs_are_effectively_identical(s['vuln_func'], s['patched_func'])]
     filtered_count = before_filter - len(all_samples)
     if filtered_count > 0:
-        print(f"\nRemoved {filtered_count} samples with identical vuln/patched functions")
+        print(f"\nRemoved {filtered_count} samples with identical/whitespace-only vuln/patched functions")
     
     # Stats
     from collections import Counter
