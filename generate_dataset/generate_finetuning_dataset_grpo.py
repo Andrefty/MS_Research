@@ -84,17 +84,49 @@ def count_tokens(text_string, tokenizer_obj, is_hf_tokenizer):
         return len(text_string.split())
 
 
+def truncate_text_to_tokens(text, max_tokens, tokenizer_obj, is_hf_tokenizer):
+    """Truncate text to fit within max_tokens, appending '...' if truncated.
+    
+    Requires a valid tokenizer — will raise if none is available.
+    """
+    if not text or max_tokens <= 0:
+        return None
+    
+    if not tokenizer_obj:
+        raise RuntimeError("truncate_text_to_tokens requires a valid tokenizer")
+    
+    if is_hf_tokenizer:
+        tokens = tokenizer_obj.encode(text, add_special_tokens=False)
+        if len(tokens) <= max_tokens:
+            return text
+        truncated = tokenizer_obj.decode(tokens[:max_tokens], skip_special_tokens=True)
+        return truncated.rstrip() + "..."
+    else:  # tiktoken
+        tokens = tokenizer_obj.encode(text)
+        if len(tokens) <= max_tokens:
+            return text
+        truncated = tokenizer_obj.decode(tokens[:max_tokens])
+        return truncated.rstrip() + "..."
+
+
 # --- GRPO Prompt Formatting ---
 
-def build_context_section(sample):
+def build_context_section(sample, commit_msg_mode='full', commit_msg_override=None):
     """
-    Build context section based on available CVE/CWE information.
-    | Scenario | Context Provided |
-    |----------|------------------|
-    | Has CVE + cve_desc | CVE: {cve}, Description: {cve_desc} |
-    | Has CVE only | CVE: {cve}, Type: {cwe} |
-    | No CVE | Vulnerability type: {cwe} |
-    | No CVE or CWE | (omit context section) |
+    Build context section with all available metadata (additive approach).
+    
+    Always includes every available field. commit_msg_mode controls commit message:
+    - 'full': include full commit message
+    - 'drop': exclude commit message entirely
+    
+    commit_msg_override: If provided, use this string instead of sample['commit_message'].
+        Used for dynamic token-level truncation by the caller.
+    
+    Fields included (when available):
+    - CVE IDs
+    - CWE IDs
+    - CVE Description
+    - Commit message (subject to commit_msg_mode / override)
     """
     cve = sample.get('cve')
     cve_desc = sample.get('cve_desc')
@@ -112,7 +144,7 @@ def build_context_section(sample):
         else:
             cve_str = str(cve) if str(cve).strip().lower() not in ["none", "null", ""] else None
     
-    # Format CWE list
+    # Format CWE (may be list or string)
     cwe_str = None
     if cwe:
         if isinstance(cwe, list):
@@ -120,16 +152,30 @@ def build_context_section(sample):
         else:
             cwe_str = str(cwe) if str(cwe).strip().lower() not in ["none", "null", ""] else None
     
+    # Resolve commit message
+    msg_str = None
+    if commit_msg_mode != 'drop':
+        if commit_msg_override is not None:
+            # Caller already truncated to fit
+            msg_str = commit_msg_override if commit_msg_override else None
+        else:
+            commit_message = sample.get('commit_message')
+            if commit_message:
+                msg = str(commit_message).strip()
+                if msg.lower() not in ["none", "null", ""]:
+                    msg_str = msg
+    
+    # Build context parts — additive, include everything available
     context_parts = []
     
-    if cve_str and cve_desc:
+    if cve_str:
         context_parts.append(f"CVE: {cve_str}")
+    if cwe_str:
+        context_parts.append(f"CWE: {cwe_str}")
+    if cve_desc:
         context_parts.append(f"Description: {cve_desc}")
-    elif cve_str and cwe_str:
-        context_parts.append(f"CVE: {cve_str}")
-        context_parts.append(f"Vulnerability type: {cwe_str}")
-    elif cwe_str:
-        context_parts.append(f"Vulnerability type: {cwe_str}")
+    if msg_str:
+        context_parts.append(f"Commit message: {msg_str}")
     
     if context_parts:
         return "Context:\n- " + "\n- ".join(context_parts)
@@ -152,15 +198,16 @@ def get_ground_truth_lines(sample):
 
 
 def format_changed_lines_hint(ground_truth_lines):
-    """Format line numbers as hint string."""
+    """Format line numbers as hint string (just the numbers, no 'Lines:' prefix)."""
     if ground_truth_lines:
-        return "Lines: " + ", ".join(map(str, ground_truth_lines))
+        return ", ".join(map(str, ground_truth_lines))
     return None
 
 
 def format_prompt_for_model_grpo(code_snippet, sample, is_vulnerable, 
                                   ground_truth_lines=None, line_number_threshold=0,
-                                  include_hints=True):
+                                  include_hints=True, commit_msg_mode='full',
+                                  commit_msg_override=None):
     """
     Format prompt for GRPO training with JSON output format.
     
@@ -171,6 +218,8 @@ def format_prompt_for_model_grpo(code_snippet, sample, is_vulnerable,
         ground_truth_lines: List of line numbers that were changed
         line_number_threshold: Unused, kept for compatibility
         include_hints: If False, skip CVE/CWE context and vulnerability hints (for evaluation)
+        commit_msg_mode: Controls commit message inclusion: 'full' or 'drop'
+        commit_msg_override: Pre-truncated commit message string (bypasses sample lookup)
     
     For training (include_hints=True):
         - Vulnerable samples: includes CVE context and changed lines hint
@@ -196,8 +245,9 @@ def format_prompt_for_model_grpo(code_snippet, sample, is_vulnerable,
     ]
     
     if include_hints:
-        # Add context section (CVE/CWE) - only when hints enabled
-        context = build_context_section(sample)
+        # Add context section (CVE/CWE/description/commit_message)
+        context = build_context_section(sample, commit_msg_mode=commit_msg_mode,
+                                        commit_msg_override=commit_msg_override)
         if context:
             prompt_parts.append(context)
             prompt_parts.append("")
@@ -339,9 +389,44 @@ def process_single_request(client, args, prompt, sample, is_vulnerable,
         }
 
 
+# Minimum tokens of actual commit message content worth including
+# (below this, the message is too short to be useful context)
+_MIN_USEFUL_COMMIT_CONTENT_TOKENS = 40
+
+# The label string added by build_context_section when including a commit message
+_COMMIT_MSG_LABEL = "\n- Commit message: "
+
+
+def _has_cve_desc(sample):
+    """Check if sample has a usable CVE description."""
+    desc = sample.get('cve_desc')
+    return desc is not None and str(desc).strip().lower() not in ["none", "null", "na", "n/a", ""]
+
+
+def _get_clean_commit_msg(sample):
+    """Extract and clean commit message from sample, or return None."""
+    msg = sample.get('commit_message')
+    if not msg:
+        return None
+    msg = str(msg).strip()
+    if msg.lower() in ['none', 'null', '']:
+        return None
+    return msg
+
+
 def prepare_request(sample, is_vulnerable, tokenizer_obj, is_hf_tokenizer, 
                     total_model_capacity, max_gen_length):
-    """Prepare a request dict without making the API call."""
+    """Prepare a request dict without making the API call.
+    
+    Uses dynamic token-aware commit_message inclusion:
+    1. Build base prompt without commit message → get base token cost
+    2. Calculate exact token budget remaining for commit message
+    3. If full commit message fits → include it
+    4. If it doesn't fit:
+       - Has CVE desc → drop commit message (it's supplementary)
+       - No CVE desc → dynamically truncate commit message to available tokens
+    5. If base prompt itself exceeds limits → skip sample
+    """
     if is_vulnerable:
         code = sample['vuln_func']
         ground_truth_lines = get_ground_truth_lines(sample)
@@ -349,17 +434,64 @@ def prepare_request(sample, is_vulnerable, tokenizer_obj, is_hf_tokenizer,
         code = sample['patched_func']
         ground_truth_lines = []
     
-    prompt = format_prompt_for_model_grpo(
+    # Step 1: Build base prompt WITHOUT commit message to get base token cost
+    prompt_base = format_prompt_for_model_grpo(
         code, sample, is_vulnerable=is_vulnerable,
-        ground_truth_lines=ground_truth_lines
+        ground_truth_lines=ground_truth_lines,
+        commit_msg_mode='drop'
     )
+    base_tokens = count_tokens(prompt_base, tokenizer_obj, is_hf_tokenizer)
+    max_prompt_budget = total_model_capacity - MIN_REASONABLE_OUTPUT_SIZE
     
+    if base_tokens > max_prompt_budget:
+        # Code + metadata (sans commit msg) already exceeds limits → skip
+        return None
+    
+    # Step 2: Check if commit message exists and calculate token budget
+    commit_msg = _get_clean_commit_msg(sample)
+    
+    if not commit_msg:
+        # No commit message → use base prompt as-is
+        prompt = prompt_base
+    else:
+        token_budget = max_prompt_budget - base_tokens
+        msg_tokens = count_tokens(commit_msg, tokenizer_obj, is_hf_tokenizer)
+        label_overhead = count_tokens(_COMMIT_MSG_LABEL, tokenizer_obj, is_hf_tokenizer)
+        
+        if msg_tokens + label_overhead <= token_budget:
+            # Full commit message fits → include it
+            prompt = format_prompt_for_model_grpo(
+                code, sample, is_vulnerable=is_vulnerable,
+                ground_truth_lines=ground_truth_lines,
+                commit_msg_mode='full'
+            )
+        elif _has_cve_desc(sample):
+            # Has CVE desc → commit message is supplementary, drop it
+            prompt = prompt_base
+        else:
+            # No CVE desc → commit message is primary context, truncate to fit
+            available_for_text = token_budget - label_overhead
+            if available_for_text >= _MIN_USEFUL_COMMIT_CONTENT_TOKENS:
+                truncated_msg = truncate_text_to_tokens(
+                    commit_msg, available_for_text, tokenizer_obj, is_hf_tokenizer
+                )
+                if truncated_msg:
+                    prompt = format_prompt_for_model_grpo(
+                        code, sample, is_vulnerable=is_vulnerable,
+                        ground_truth_lines=ground_truth_lines,
+                        commit_msg_mode='full',
+                        commit_msg_override=truncated_msg
+                    )
+                else:
+                    prompt = prompt_base
+            else:
+                # Not enough room even for a minimally useful truncated message
+                prompt = prompt_base
+    
+    # Calculate actual api_max_tokens for the final prompt
     prompt_tokens = count_tokens(prompt, tokenizer_obj, is_hf_tokenizer)
     max_new_tokens = total_model_capacity - prompt_tokens
     api_max_tokens = min(max_gen_length, max_new_tokens)
-    
-    if api_max_tokens < MIN_REASONABLE_OUTPUT_SIZE:
-        return None  # Skip due to token limit
     
     return {
         'sample': sample,
