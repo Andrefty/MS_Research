@@ -912,15 +912,36 @@ def main():
         print(f"Total after dedup: {len(all_samples)}")
     
     # Enrich ALL surviving entries with pooled metadata
+    # Pool provides commit-level data. For per-function fields (CVE, CWE, cve_desc),
+    # we only fill from pool when the entry has NO data — never union/overwrite,
+    # because different functions in the same commit may have distinct CVEs/CWEs.
     print("\nEnriching entries with pooled commit metadata...")
     for s in all_samples:
         cid = s['commit_id'].lower()
         if cid in metadata_pool:
             pooled = metadata_pool[cid]
-            s['cve'] = pooled['cve']
-            s['cwe'] = pooled['cwe']
-            if pooled['cve_desc']:
+            
+            # CVE: only fill from pool if entry has none
+            existing_cve = [c for c in (s.get('cve') or []) if c and str(c).strip().lower() not in ['none', 'null', '']]
+            if not existing_cve and pooled['cve']:
+                s['cve'] = pooled['cve']
+            elif existing_cve:
+                s['cve'] = sorted(set(str(c).strip() for c in existing_cve))
+            
+            # CWE: only fill from pool if entry has none
+            existing_cwe = [c for c in (s.get('cwe') or []) if c and str(c).strip().lower() not in ['none', 'null', '']]
+            if not existing_cwe and pooled['cwe']:
+                s['cwe'] = pooled['cwe']
+            elif existing_cwe:
+                s['cwe'] = sorted(set(str(c).strip() for c in existing_cwe))
+            
+            # cve_desc: only fill from pool if entry has none
+            entry_desc = s.get('cve_desc')
+            has_own_desc = entry_desc and str(entry_desc).strip().lower() not in ['none', 'null', 'na', 'n/a', '']
+            if not has_own_desc and pooled['cve_desc']:
                 s['cve_desc'] = pooled['cve_desc']
+            
+            # commit_message: keep longest (always commit-level, safe to pool)
             if pooled['commit_message'] and len(pooled['commit_message']) > len(s.get('commit_message', '')):
                 s['commit_message'] = pooled['commit_message']
     
