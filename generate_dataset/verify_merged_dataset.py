@@ -12,6 +12,7 @@ Usage:
 
 import json
 import argparse
+import re
 from collections import Counter, defaultdict
 
 
@@ -152,6 +153,29 @@ def main():
     print(f"\n--- Additional stats ---")
     print(f"  Samples with deleted_lines: {has_deleted}")
     print(f"  Samples without deleted_lines: {no_deleted_vuln}")
+    
+    # Check for identical vuln/patched functions (should be 0)
+    identical_funcs = 0
+    for s in samples:
+        v = s.get('vuln_func', '').strip()
+        p = s.get('patched_func', '').strip()
+        if v and p and v == p:
+            identical_funcs += 1
+    if identical_funcs > 0:
+        print(f"  ⚠ WARNING: {identical_funcs} samples have identical vuln and patched functions!")
+    else:
+        print(f"  ✅ No identical vuln/patched functions")
+        
+    # Check for CVE/desc mismatches
+    cve_mismatches = 0
+    for s in samples:
+        desc = str(s.get('cve_desc', ''))
+        cves = s.get('cve', [])
+        if desc and cves:
+            desc_cves = set(re.findall(r'CVE-\d{4}-\d+', desc))
+            if desc_cves and set(cves) and not desc_cves.intersection(set(cves)):
+                cve_mismatches += 1
+    print(f"  CVE/desc mismatches: {cve_mismatches} (expected ~166 from PV source)")
     
     # Check new fields
     has_func_name = sum(1 for s in samples if s.get('func_name'))
