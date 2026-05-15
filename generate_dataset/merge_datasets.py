@@ -866,7 +866,15 @@ def deduplicate_by_function(samples: list[dict]) -> list[dict]:
         if added > removed:
             return merge_metadata(b, a)
         else:
-            # Tie-break: prefer entry with commit_message, then priority
+            # Tie-break 1: prefer entry with cve_desc
+            a_has_desc = _has_valid_desc(a.get('cve_desc'))
+            b_has_desc = _has_valid_desc(b.get('cve_desc'))
+            if b_has_desc and not a_has_desc:
+                return merge_metadata(b, a)
+            elif a_has_desc and not b_has_desc:
+                return merge_metadata(a, b)
+            
+            # Tie-break 2: prefer entry with commit_message
             a_has_msg = bool(a.get('commit_message', '').strip())
             b_has_msg = bool(b.get('commit_message', '').strip())
             if b_has_msg and not a_has_msg:
