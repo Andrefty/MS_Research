@@ -627,77 +627,136 @@ def load_secvuleval(paths: list[str]) -> list[dict]:
 
 # --- Metadata Pooling and Function-Level Deduplication ---
 
-def build_commit_metadata_pool(samples: list[dict]) -> dict:
+def build_metadata_pools(samples: list[dict]) -> tuple[dict, set]:
     """
-    Build a commit-level metadata pool from ALL sources.
+    Build commit-level metadata pool and detect heterogeneous commits.
     
-    For each commit_id, merges:
-    - cve: union of all CVE IDs from all sources
-    - cwe: union of all CWE IDs from all sources
-    - cve_desc: prefer PrimeVul; fall back to SecVulEval if >5 chars
-    - commit_message: prefer longest non-empty message
+    Cross-source enrichment for the SAME function (same or different code
+    variants) is handled during dedup via merge_metadata — not here.
     
-    Returns dict mapping commit_id -> {cve, cwe, cve_desc, commit_message}
+    This function handles:
+    1. Commit-level pool: commit_id -> merged metadata across ALL functions
+       Only applied for commits where all functions share the same CVE/CWE/desc.
+       Heterogeneity is detected globally across all sources: if ANY source
+       shows different CVEs per function, the commit is heterogeneous.
+    2. commit_message pooling: always safe (inherently commit-level).
+    
+    Returns:
+        commit_pool: dict mapping commit_id -> {cve, cwe, cve_desc, commit_message}
+        heterogeneous_commits: set of commit_ids where functions have different CVE/CWE/desc
     """
-    pool = defaultdict(lambda: {
-        'cve_set': set(),
-        'cwe_set': set(),
-        'cve_desc': None,
-        'commit_message': '',
-    })
-    
     # Priority for cve_desc: PV > SE > SVEN
     desc_priority = {'primevul': 0, 'secvuleval': 1, 'sven': 2}
     
+    # Collect per-(commit, func_name) metadata for heterogeneity detection.
+    # We group by (commit_id, func_name) — NOT vuln_hash — because that's
+    # the level at which heterogeneity matters: different function names
+    # within a commit should be allowed to have different metadata.
+    func_meta = defaultdict(lambda: {
+        'cve_set': set(),
+        'cwe_set': set(),
+        'cve_desc': None,
+        '_desc_prio': 99,
+    })
+    
+    # commit_message is always commit-level
+    commit_msg = defaultdict(str)
+    
     for s in samples:
         cid = s['commit_id'].lower()
-        p = pool[cid]
+        fn = s.get('func_name', '')
+        fkey = (cid, fn)
+        fm = func_meta[fkey]
         
-        # Merge CVEs
+        # Collect CVEs
         for cve in (s.get('cve') or []):
             if cve and str(cve).strip().lower() not in ['none', 'null', '']:
-                p['cve_set'].add(str(cve).strip())
+                fm['cve_set'].add(str(cve).strip())
         
-        # Merge CWEs (filter out NVD placeholders that carry no signal)
+        # Collect CWEs (filter out NVD placeholders)
         for cwe in (s.get('cwe') or []):
             cwe_str = str(cwe).strip()
             if (cwe_str and cwe_str.lower() not in ['none', 'null', '']
                     and cwe_str not in ['NVD-CWE-noinfo', 'NVD-CWE-Other']):
-                p['cwe_set'].add(cwe_str)
+                fm['cwe_set'].add(cwe_str)
         
         # cve_desc: prefer PV, fall back to SE
         desc = s.get('cve_desc')
         if desc and str(desc).strip().lower() not in ['none', 'null', ''] and len(str(desc).strip()) > 5:
             src_prio = desc_priority.get(s['source'], 99)
-            if p['cve_desc'] is None:
-                p['cve_desc'] = str(desc).strip()
-                p['_desc_prio'] = src_prio
-            elif src_prio < p.get('_desc_prio', 99):
-                p['cve_desc'] = str(desc).strip()
-                p['_desc_prio'] = src_prio
+            if fm['cve_desc'] is None or src_prio < fm['_desc_prio']:
+                fm['cve_desc'] = str(desc).strip()
+                fm['_desc_prio'] = src_prio
         
         # commit_message: keep longest
         msg = s.get('commit_message', '')
         if msg and not isinstance(msg, float):
             msg = str(msg)
-            if len(msg) > len(p['commit_message']):
-                p['commit_message'] = msg
+            if len(msg) > len(commit_msg[cid]):
+                commit_msg[cid] = msg
     
-    # Convert sets to sorted lists
-    result = {}
-    for cid, p in pool.items():
-        result[cid] = {
-            'cve': sorted(p['cve_set']),
-            'cwe': sorted(p['cwe_set']),
-            'cve_desc': p['cve_desc'],
-            'commit_message': p['commit_message'],
+    # --- Build commit-level pool by aggregating per-function data ---
+    commit_raw = defaultdict(lambda: {
+        'cve_set': set(),
+        'cwe_set': set(),
+        'cve_desc': None,
+        '_desc_prio': 99,
+    })
+    
+    # Track per-function metadata variants for heterogeneity detection
+    commit_func_variants = defaultdict(lambda: {
+        'cve_variants': [],
+        'cwe_variants': [],
+        'desc_variants': [],
+    })
+    
+    for (cid, fn), fm in func_meta.items():
+        cp = commit_raw[cid]
+        cp['cve_set'] |= fm['cve_set']
+        cp['cwe_set'] |= fm['cwe_set']
+        if fm['cve_desc'] and (cp['cve_desc'] is None or fm['_desc_prio'] < cp['_desc_prio']):
+            cp['cve_desc'] = fm['cve_desc']
+            cp['_desc_prio'] = fm['_desc_prio']
+        
+        # Track variants (only for functions that actually have data)
+        variants = commit_func_variants[cid]
+        if fm['cve_set']:
+            variants['cve_variants'].append(frozenset(fm['cve_set']))
+        if fm['cwe_set']:
+            variants['cwe_variants'].append(frozenset(fm['cwe_set']))
+        if fm['cve_desc']:
+            variants['desc_variants'].append(fm['cve_desc'])
+    
+    # --- Detect heterogeneous commits ---
+    heterogeneous_commits = set()
+    for cid, variants in commit_func_variants.items():
+        if len(set(variants['cve_variants'])) > 1:
+            heterogeneous_commits.add(cid)
+        if len(set(variants['cwe_variants'])) > 1:
+            heterogeneous_commits.add(cid)
+        if len(set(variants['desc_variants'])) > 1:
+            heterogeneous_commits.add(cid)
+    
+    # --- Convert to final output format ---
+    commit_pool = {}
+    for cid, cp in commit_raw.items():
+        commit_pool[cid] = {
+            'cve': sorted(cp['cve_set']),
+            'cwe': sorted(cp['cwe_set']),
+            'cve_desc': cp['cve_desc'],
+            'commit_message': commit_msg.get(cid, ''),
         }
-    return result
+    
+    return commit_pool, heterogeneous_commits
 
 
 def deduplicate_by_function(samples: list[dict]) -> list[dict]:
     """
     Function-level deduplication with validated 3-tier conflict resolution.
+    
+    When entries are collapsed (same function, different code variants from
+    different sources), metadata (CVE, CWE, cve_desc, commit_message) from
+    the loser is merged into the winner to preserve cross-source enrichment.
     
     Strategy (validated against 457 conflict pairs, 0 wrong collapses):
     1. Group by (commit_id, func_name)
@@ -714,11 +773,64 @@ def deduplicate_by_function(samples: list[dict]) -> list[dict]:
     """
     source_priority = {"sven": 0, "secvuleval": 1, "primevul": 2}
     
+    def _clean_meta_list(vals):
+        """Clean a CVE/CWE list: filter out None/null/empty."""
+        return [str(c).strip() for c in (vals or []) if c and str(c).strip().lower() not in ['none', 'null', '']]
+    
+    def _has_valid_desc(d):
+        return d and str(d).strip().lower() not in ['none', 'null', 'na', 'n/a', '']
+    
+    def merge_metadata(winner, loser):
+        """
+        Fill metadata gaps in winner from loser (in-place). Fill-only semantics:
+        winner's existing CVE/CWE/desc is never overwritten or unioned — loser's
+        data is only used when the winner lacks that field entirely.
+        commit_message: keep longest (safe, inherently commit-level).
+        """
+        # CVE: fill only if winner has none
+        w_cve = _clean_meta_list(winner.get('cve'))
+        if not w_cve:
+            l_cve = _clean_meta_list(loser.get('cve'))
+            if l_cve:
+                winner['cve'] = sorted(set(l_cve))
+        
+        # CWE: fill only if winner has none
+        w_cwe = _clean_meta_list(winner.get('cwe'))
+        if not w_cwe:
+            l_cwe = _clean_meta_list(loser.get('cwe'))
+            if l_cwe:
+                winner['cwe'] = sorted(set(l_cwe))
+        
+        # cve_desc: fill if winner lacks one AND CVEs are compatible.
+        # "Compatible" = CVEs match, one is a subset of the other, or
+        # one/both sides have no CVEs. Subset handles the common case
+        # where PV has 1 CVE and SE has multiple including PV's.
+        # If CVEs explicitly differ, skip desc — it describes a different
+        # vulnerability and taking it would create a CVE/desc mismatch.
+        if not _has_valid_desc(winner.get('cve_desc')) and _has_valid_desc(loser.get('cve_desc')):
+            w_cve_now = set(_clean_meta_list(winner.get('cve')))
+            l_cve_set = set(_clean_meta_list(loser.get('cve')))
+            cves_compatible = (not w_cve_now or not l_cve_set
+                               or w_cve_now == l_cve_set
+                               or w_cve_now.issubset(l_cve_set)
+                               or l_cve_set.issubset(w_cve_now))
+            if cves_compatible:
+                winner['cve_desc'] = loser['cve_desc']
+        
+        # commit_message: keep longest
+        w_msg = winner.get('commit_message', '')
+        l_msg = loser.get('commit_message', '')
+        if l_msg and not isinstance(l_msg, float) and len(str(l_msg)) > len(str(w_msg or '')):
+            winner['commit_message'] = str(l_msg)
+        
+        return winner
+    
     def is_valid_pair(sample):
         return sample['vuln_func'] != sample['patched_func']
     
     def pick_best(entries):
-        """Pick best entry from a list of same-hash entries by priority."""
+        """Pick best entry from a list of same-hash entries by priority.
+        Merges metadata from all losers into the winner."""
         best = entries[0]
         for e in entries[1:]:
             e_valid = is_valid_pair(e)
@@ -727,40 +839,47 @@ def deduplicate_by_function(samples: list[dict]) -> list[dict]:
             b_prio = source_priority.get(best['source'], 99)
             
             if e_valid and not b_valid:
+                merge_metadata(e, best)
                 best = e
             elif not e_valid and b_valid:
-                pass
+                merge_metadata(best, e)
             elif e_prio < b_prio:
+                merge_metadata(e, best)
                 best = e
+            else:
+                merge_metadata(best, e)
         return best
     
     def collapse_pair(a, b):
         """
         Collapse two entries into one. A is shorter, B is longer.
-        Returns the winning entry.
+        Returns the winning entry with metadata merged from the loser.
         """
         added, removed, sim = compute_normalized_diff(a['vuln_func'], b['vuln_func'])
         one_contains = removed == 0
         
         if one_contains:
-            # B wholly contains A → keep B
-            return b
+            # B wholly contains A → keep B, merge A's metadata
+            return merge_metadata(b, a)
         
         # Keep version with more added lines
         if added > removed:
-            return b
+            return merge_metadata(b, a)
         else:
             # Tie-break: prefer entry with commit_message, then priority
             a_has_msg = bool(a.get('commit_message', '').strip())
             b_has_msg = bool(b.get('commit_message', '').strip())
             if b_has_msg and not a_has_msg:
-                return b
+                return merge_metadata(b, a)
             elif a_has_msg and not b_has_msg:
-                return a
+                return merge_metadata(a, b)
             # Final tie-break: source priority
             a_prio = source_priority.get(a['source'], 99)
             b_prio = source_priority.get(b['source'], 99)
-            return a if a_prio <= b_prio else b
+            if a_prio <= b_prio:
+                return merge_metadata(a, b)
+            else:
+                return merge_metadata(b, a)
     
     # Step 1: Group by (commit_id, func_name)
     by_cf = defaultdict(list)
@@ -839,6 +958,42 @@ def deduplicate_by_function(samples: list[dict]) -> list[dict]:
             
             variants = new_variants
         
+        # Cross-enrich "kept both" variants (different vuln_hash, genuinely
+        # different code but potentially same vulnerability from different sources).
+        # Only fill gaps when CVEs are compatible (match or is subset of the other, or one side empty).
+        # If CVEs explicitly differ, skip desc — it describes a different vulnerability and taking it would create a CVE/desc mismatch.
+        if len(variants) > 1:
+            for i in range(len(variants)):
+                vi = variants[i]
+                vi_cve = set(_clean_meta_list(vi.get('cve')))
+                vi_cwe = set(_clean_meta_list(vi.get('cwe')))
+                vi_has_desc = _has_valid_desc(vi.get('cve_desc'))
+                
+                for j in range(len(variants)):
+                    if i == j:
+                        continue
+                    vj = variants[j]
+                    vj_cve = set(_clean_meta_list(vj.get('cve')))
+                    cves_ok = (not vi_cve or not vj_cve or vi_cve == vj_cve
+                               or vi_cve.issubset(vj_cve) or vj_cve.issubset(vi_cve))
+                    
+                    # CVE: fill if vi has none
+                    if not vi_cve and vj_cve:
+                        vi['cve'] = sorted(vj_cve)
+                        vi_cve = vj_cve  # update for subsequent checks
+                    
+                    # CWE: fill if vi has none
+                    if not vi_cwe:
+                        vj_cwe = set(_clean_meta_list(vj.get('cwe')))
+                        if vj_cwe:
+                            vi['cwe'] = sorted(vj_cwe)
+                            vi_cwe = vj_cwe
+                    
+                    # cve_desc: fill if vi lacks one and CVEs compatible
+                    if not vi_has_desc and _has_valid_desc(vj.get('cve_desc')) and cves_ok:
+                        vi['cve_desc'] = vj['cve_desc']
+                        vi_has_desc = True
+        
         survivors.extend(variants)
         if len(by_hash) > 1:
             stats['conflicts_kept_both'] += len(variants)
@@ -890,16 +1045,18 @@ def main():
     all_samples = primevul_samples + sven_samples + secvuleval_samples
     print(f"\nTotal before dedup: {len(all_samples)}")
     
-    # Build commit-level metadata pool (BEFORE dedup, using ALL sources)
-    print("\nBuilding commit-level metadata pool...")
-    metadata_pool = build_commit_metadata_pool(all_samples)
-    print(f"  Pooled metadata for {len(metadata_pool)} unique commits")
+    # Build metadata pools (BEFORE dedup, using ALL sources)
+    print("\nBuilding metadata pools...")
+    commit_pool, heterogeneous_commits = build_metadata_pools(all_samples)
+    print(f"  Commit-level entries: {len(commit_pool)}")
+    if heterogeneous_commits:
+        print(f"  Heterogeneous commits (per-function metadata preserved): {len(heterogeneous_commits)}")
     
-    # Count metadata coverage
-    pool_has_cve = sum(1 for v in metadata_pool.values() if v['cve'])
-    pool_has_cwe = sum(1 for v in metadata_pool.values() if v['cwe'])
-    pool_has_desc = sum(1 for v in metadata_pool.values() if v['cve_desc'])
-    pool_has_msg = sum(1 for v in metadata_pool.values() if v['commit_message'])
+    # Count metadata coverage (commit-level stats)
+    pool_has_cve = sum(1 for v in commit_pool.values() if v['cve'])
+    pool_has_cwe = sum(1 for v in commit_pool.values() if v['cwe'])
+    pool_has_desc = sum(1 for v in commit_pool.values() if v['cve_desc'])
+    pool_has_msg = sum(1 for v in commit_pool.values() if v['commit_message'])
     print(f"  Commits with CVE: {pool_has_cve}")
     print(f"  Commits with CWE: {pool_has_cwe}")
     print(f"  Commits with cve_desc: {pool_has_desc}")
@@ -911,39 +1068,47 @@ def main():
         all_samples = deduplicate_by_function(all_samples)
         print(f"Total after dedup: {len(all_samples)}")
     
-    # Enrich ALL surviving entries with pooled metadata
-    # Pool provides commit-level data. For per-function fields (CVE, CWE, cve_desc),
-    # we only fill from pool when the entry has NO data — never union/overwrite,
-    # because different functions in the same commit may have distinct CVEs/CWEs.
-    print("\nEnriching entries with pooled commit metadata...")
+    # Enrich surviving entries with commit-level pooled metadata.
+    # Cross-source enrichment for same-function is already handled by
+    # merge_metadata during dedup (pick_best / collapse_pair).
+    # Here we only fill gaps from the commit-level pool (homogeneous commits)
+    # and commit_message (always safe, inherently commit-level).
+    print("\nEnriching entries with pooled metadata...")
     for s in all_samples:
         cid = s['commit_id'].lower()
-        if cid in metadata_pool:
-            pooled = metadata_pool[cid]
+        
+        # Helper: clean list of valid values
+        def _clean_list(vals):
+            return [str(c).strip() for c in (vals or []) if c and str(c).strip().lower() not in ['none', 'null', '']]
+        
+        def _has_desc(d):
+            return d and str(d).strip().lower() not in ['none', 'null', 'na', 'n/a', '']
+        
+        existing_cve = _clean_list(s.get('cve'))
+        existing_cwe = _clean_list(s.get('cwe'))
+        has_own_desc = _has_desc(s.get('cve_desc'))
+        
+        # For homogeneous commits, fill gaps from commit-level pool
+        if cid not in heterogeneous_commits and cid in commit_pool:
+            cp = commit_pool[cid]
+            if not existing_cve and cp['cve']:
+                existing_cve = cp['cve']
             
-            # CVE: only fill from pool if entry has none
-            existing_cve = [c for c in (s.get('cve') or []) if c and str(c).strip().lower() not in ['none', 'null', '']]
-            if not existing_cve and pooled['cve']:
-                s['cve'] = pooled['cve']
-            elif existing_cve:
-                s['cve'] = sorted(set(str(c).strip() for c in existing_cve))
+            if not existing_cwe and cp['cwe']:
+                existing_cwe = cp['cwe']
             
-            # CWE: only fill from pool if entry has none
-            existing_cwe = [c for c in (s.get('cwe') or []) if c and str(c).strip().lower() not in ['none', 'null', '']]
-            if not existing_cwe and pooled['cwe']:
-                s['cwe'] = pooled['cwe']
-            elif existing_cwe:
-                s['cwe'] = sorted(set(str(c).strip() for c in existing_cwe))
-            
-            # cve_desc: only fill from pool if entry has none
-            entry_desc = s.get('cve_desc')
-            has_own_desc = entry_desc and str(entry_desc).strip().lower() not in ['none', 'null', 'na', 'n/a', '']
-            if not has_own_desc and pooled['cve_desc']:
-                s['cve_desc'] = pooled['cve_desc']
-            
-            # commit_message: keep longest (always commit-level, safe to pool)
-            if pooled['commit_message'] and len(pooled['commit_message']) > len(s.get('commit_message', '')):
-                s['commit_message'] = pooled['commit_message']
+            if not has_own_desc and cp['cve_desc']:
+                s['cve_desc'] = cp['cve_desc']
+        
+        # Write back cleaned CVE/CWE
+        s['cve'] = sorted(set(existing_cve)) if existing_cve else []
+        s['cwe'] = sorted(set(existing_cwe)) if existing_cwe else []
+        
+        # commit_message: always commit-level, safe to pool unconditionally
+        if cid in commit_pool:
+            cp_msg = commit_pool[cid].get('commit_message', '')
+            if cp_msg and len(cp_msg) > len(s.get('commit_message', '')):
+                s['commit_message'] = cp_msg
     
     # Final filter: remove samples where vuln_func is effectively identical to patched_func
     # (exact match OR only trailing whitespace differences — not real fixes)
