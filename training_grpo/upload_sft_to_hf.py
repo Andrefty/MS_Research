@@ -53,13 +53,23 @@ def main():
         print(f"❌ Directory {step_dir} does not exist or is not a directory.")
         return
 
-    model_files = get_model_files(step_dir)
-    if not model_files:
+    all_files = get_model_files(step_dir)
+    if not all_files:
         print(f"❌ No files found in {step_dir}")
         return
 
-    print(f"\n=== Uploading {step_dir.name} ({len(model_files)} files) ===")
-    for local, repo in model_files:
+    readme_file = step_dir / "README.md"
+    if readme_file.exists():
+        all_files.append((readme_file, "README.md"))
+
+    eval_results_dir = step_dir / "sft_qwen3_4b_eval_results"
+    if eval_results_dir.exists():
+        for f in eval_results_dir.rglob('*'):
+            if f.is_file():
+                all_files.append((f, f"sft_qwen3_4b_eval_results/{f.relative_to(eval_results_dir)}"))
+
+    print(f"\n=== Uploading {step_dir.name} ({len(all_files)} files) ===")
+    for local, repo in all_files:
         size = os.path.getsize(local) / 1e9
         if size > 0.01:
             print(f"  {repo} ({size:.2f} GB)")
@@ -69,7 +79,7 @@ def main():
     if not args.dry_run:
         operations = [
             CommitOperationAdd(path_in_repo=repo_path, path_or_fileobj=str(local_path))
-            for local_path, repo_path in model_files
+            for local_path, repo_path in all_files
         ]
         upload_commit(api, REPO_ID, operations, args.message)
 
