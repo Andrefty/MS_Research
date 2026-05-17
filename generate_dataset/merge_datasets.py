@@ -750,6 +750,54 @@ def build_metadata_pools(samples: list[dict]) -> tuple[dict, set]:
     return commit_pool, heterogeneous_commits
 
 
+def enrich_with_commit_pool(samples: list[dict], commit_pool: dict,
+                            heterogeneous_commits: set) -> None:
+    """
+    Fill metadata gaps in entries from the commit-level pool (in-place).
+    
+    Cross-source enrichment for the same function is already handled during dedup
+    by merge_metadata in pick_best / collapse_pair. This function handles
+    cross-FUNCTION enrichment within homogeneous commits only.
+    
+    Fill-only semantics: existing entry metadata is never overwritten.
+    Heterogeneous commits are skipped for CVE/CWE/desc (would cross-contaminate).
+    commit_message is always pooled (inherently commit-level).
+    """
+    def _clean_list(vals):
+        return [str(c).strip() for c in (vals or [])
+                if c and str(c).strip().lower() not in ['none', 'null', '']]
+    
+    def _has_desc(d):
+        return d and str(d).strip().lower() not in ['none', 'null', 'na', 'n/a', '']
+    
+    for s in samples:
+        cid = s['commit_id'].lower()
+        
+        existing_cve = _clean_list(s.get('cve'))
+        existing_cwe = _clean_list(s.get('cwe'))
+        has_own_desc = _has_desc(s.get('cve_desc'))
+        
+        # For homogeneous commits, fill gaps from commit-level pool
+        if cid not in heterogeneous_commits and cid in commit_pool:
+            cp = commit_pool[cid]
+            if not existing_cve and cp['cve']:
+                existing_cve = cp['cve']
+            if not existing_cwe and cp['cwe']:
+                existing_cwe = cp['cwe']
+            if not has_own_desc and cp['cve_desc']:
+                s['cve_desc'] = cp['cve_desc']
+        
+        # Write back cleaned CVE/CWE
+        s['cve'] = sorted(set(existing_cve)) if existing_cve else []
+        s['cwe'] = sorted(set(existing_cwe)) if existing_cwe else []
+        
+        # commit_message: always commit-level, safe to pool unconditionally
+        if cid in commit_pool:
+            cp_msg = commit_pool[cid].get('commit_message', '')
+            if cp_msg and len(cp_msg) > len(s.get('commit_message', '')):
+                s['commit_message'] = cp_msg
+
+
 def deduplicate_by_function(samples: list[dict]) -> list[dict]:
     """
     Function-level deduplication with validated 3-tier conflict resolution.
@@ -1077,46 +1125,8 @@ def main():
         print(f"Total after dedup: {len(all_samples)}")
     
     # Enrich surviving entries with commit-level pooled metadata.
-    # Cross-source enrichment for same-function is already handled by
-    # merge_metadata during dedup (pick_best / collapse_pair).
-    # Here we only fill gaps from the commit-level pool (homogeneous commits)
-    # and commit_message (always safe, inherently commit-level).
     print("\nEnriching entries with pooled metadata...")
-    for s in all_samples:
-        cid = s['commit_id'].lower()
-        
-        # Helper: clean list of valid values
-        def _clean_list(vals):
-            return [str(c).strip() for c in (vals or []) if c and str(c).strip().lower() not in ['none', 'null', '']]
-        
-        def _has_desc(d):
-            return d and str(d).strip().lower() not in ['none', 'null', 'na', 'n/a', '']
-        
-        existing_cve = _clean_list(s.get('cve'))
-        existing_cwe = _clean_list(s.get('cwe'))
-        has_own_desc = _has_desc(s.get('cve_desc'))
-        
-        # For homogeneous commits, fill gaps from commit-level pool
-        if cid not in heterogeneous_commits and cid in commit_pool:
-            cp = commit_pool[cid]
-            if not existing_cve and cp['cve']:
-                existing_cve = cp['cve']
-            
-            if not existing_cwe and cp['cwe']:
-                existing_cwe = cp['cwe']
-            
-            if not has_own_desc and cp['cve_desc']:
-                s['cve_desc'] = cp['cve_desc']
-        
-        # Write back cleaned CVE/CWE
-        s['cve'] = sorted(set(existing_cve)) if existing_cve else []
-        s['cwe'] = sorted(set(existing_cwe)) if existing_cwe else []
-        
-        # commit_message: always commit-level, safe to pool unconditionally
-        if cid in commit_pool:
-            cp_msg = commit_pool[cid].get('commit_message', '')
-            if cp_msg and len(cp_msg) > len(s.get('commit_message', '')):
-                s['commit_message'] = cp_msg
+    enrich_with_commit_pool(all_samples, commit_pool, heterogeneous_commits)
     
     # Final filter: remove samples where vuln_func is effectively identical to patched_func
     # (exact match OR only trailing whitespace differences — not real fixes)

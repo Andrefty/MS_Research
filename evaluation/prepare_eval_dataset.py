@@ -25,7 +25,9 @@ from glob import glob
 # Add parent directory to path for imports
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', 'generate_dataset'))
 
-from merge_datasets import load_primevul, load_sven, deduplicate_by_function, build_commit_metadata_pool, funcs_are_effectively_identical
+from merge_datasets import (load_primevul, load_sven, deduplicate_by_function,
+                            build_metadata_pools, enrich_with_commit_pool,
+                            funcs_are_effectively_identical)
 
 
 def main():
@@ -79,27 +81,21 @@ def main():
     
     print(f"\nTotal before dedup: {len(all_samples)}")
     
-    # Build metadata pool and deduplicate (same logic as training pipeline)
-    print("\nBuilding commit-level metadata pool...")
-    metadata_pool = build_commit_metadata_pool(all_samples)
-    print(f"  Pooled metadata for {len(metadata_pool)} unique commits")
+    # Build metadata pools and deduplicate (same logic as training pipeline)
+    print("\nBuilding metadata pools...")
+    commit_pool, heterogeneous_commits = build_metadata_pools(all_samples)
+    print(f"  Commit-level entries: {len(commit_pool)}")
+    if heterogeneous_commits:
+        print(f"  Heterogeneous commits (per-function metadata preserved): {len(heterogeneous_commits)}")
     
     print("\nDeduplicating by (commit_id, func_name, vuln_hash)...")
     all_samples = deduplicate_by_function(all_samples)
     print(f"Total after dedup: {len(all_samples)}")
     
-    # Enrich with pooled metadata
-    print("\nEnriching entries with pooled commit metadata...")
-    for s in all_samples:
-        cid = s['commit_id'].lower()
-        if cid in metadata_pool:
-            pooled = metadata_pool[cid]
-            s['cve'] = pooled['cve']
-            s['cwe'] = pooled['cwe']
-            if pooled['cve_desc']:
-                s['cve_desc'] = pooled['cve_desc']
-            if pooled['commit_message'] and len(pooled['commit_message']) > len(s.get('commit_message', '')):
-                s['commit_message'] = pooled['commit_message']
+    # Enrich surviving entries with commit-level pooled metadata
+    # (same logic as training pipeline — fill-only, heterogeneity-aware)
+    print("\nEnriching entries with pooled metadata...")
+    enrich_with_commit_pool(all_samples, commit_pool, heterogeneous_commits)
     
     # Filter samples where vuln_func is effectively identical to patched_func
     # (exact match OR only trailing whitespace differences — not real fixes)
