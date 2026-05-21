@@ -197,6 +197,21 @@ def get_ground_truth_lines(sample):
     return []
 
 
+def get_added_lines(sample):
+    """Extract line numbers from added_lines (fix lines in patched code).
+    
+    Used for hints in teacher generation prompts for patched samples.
+    Filters out entries with empty text.
+    """
+    added_lines = sample.get('added_lines', [])
+    if added_lines:
+        return sorted(set(
+            item['line_no'] for item in added_lines
+            if 'line_no' in item and item.get('text', '').strip()
+        ))
+    return []
+
+
 def format_changed_lines_hint(ground_truth_lines):
     """Format line numbers as hint string (just the numbers, no 'Lines:' prefix)."""
     if ground_truth_lines:
@@ -261,13 +276,18 @@ def format_prompt_for_model_grpo(code_snippet, sample, is_vulnerable,
                 prompt_parts.append(f"The changed lines that might be related to the vulnerability are: {lines_hint}.")
         elif is_vulnerable is False:  # Explicitly False, not None
             prompt_parts.append("Hint: This code is the patched (non-vulnerable) version.")
+            # Add fix lines hint for patched samples
+            added_lines = get_added_lines(sample)
+            if added_lines:
+                lines_str = ", ".join(map(str, added_lines))
+                prompt_parts.append(f"The lines where the fix was applied are: {lines_str}.")
         
         prompt_parts.append("")
     
     # Add JSON output instruction
     prompt_parts.append(
         'Task: After your reasoning, provide your analysis in JSON format: '
-        '{"classification": "VULNERABLE" or "NOT_VULNERABLE", "vulnerable_lines": [...], "reasoning_summary": "..."}'
+        '{"classification": "VULNERABLE" or "NOT_VULNERABLE", "important_lines": [...], "reasoning_summary": "..."}'
     )
     
     return "\n".join(prompt_parts)
@@ -276,7 +296,7 @@ def format_prompt_for_model_grpo(code_snippet, sample, is_vulnerable,
 def parse_model_response(response_text):
     """
     Parse model response to extract classification and vulnerable lines.
-    Returns: (classification, vulnerable_lines) or (None, None) if parsing fails.
+    Returns: (classification, important_lines) or (None, None) if parsing fails.
     """
     classification, lines = parse_for_reward(response_text)
     if classification is None:
@@ -361,6 +381,7 @@ def process_single_request(client, args, prompt, sample, is_vulnerable,
         parsed_class, parsed_lines = parse_model_response(generated_text)
         
         return {
+            "pair_id": sample.get('pair_id', ''),
             "commit_id": sample['commit_id'],
             "func_name": sample.get('func_name', ''),
             "vuln_hash": sample.get('vuln_hash', ''),
@@ -371,10 +392,11 @@ def process_single_request(client, args, prompt, sample, is_vulnerable,
             "generated_response": generated_text,
             "ground_truth_lines": ground_truth_lines if is_vulnerable else [],
             "parsed_classification": parsed_class,
-            "parsed_vulnerable_lines": parsed_lines
+            "parsed_important_lines": parsed_lines
         }
     except Exception as e:
         return {
+            "pair_id": sample.get('pair_id', ''),
             "commit_id": sample['commit_id'],
             "func_name": sample.get('func_name', ''),
             "vuln_hash": sample.get('vuln_hash', ''),
@@ -385,7 +407,7 @@ def process_single_request(client, args, prompt, sample, is_vulnerable,
             "generated_response": f"ERROR_SGLANG_CALL: {str(e)}",
             "ground_truth_lines": ground_truth_lines if is_vulnerable else [],
             "parsed_classification": None,
-            "parsed_vulnerable_lines": None
+            "parsed_important_lines": None
         }
 
 

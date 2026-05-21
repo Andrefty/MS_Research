@@ -148,7 +148,7 @@ python -m verl.trainer.main_ppo \
     actor_rollout_ref.rollout.max_num_batched_tokens=41960 \
     actor_rollout_ref.rollout.max_num_seqs=64 \
     actor_rollout_ref.rollout.enable_chunked_prefill=True \
-    actor_rollout_ref.rollout.temperature=0.6 \
+    actor_rollout_ref.rollout.temperature=1.0 \
     actor_rollout_ref.rollout.top_p=0.95 \
     actor_rollout_ref.rollout.top_k=20 \
     actor_rollout_ref.rollout.n=16 \
@@ -170,6 +170,7 @@ python -m verl.trainer.main_ppo \
     trainer.nnodes=1 \
     trainer.save_freq=60 \
     +trainer.remove_previous_ckpt_in_save=True \
+    trainer.del_local_ckpt_after_load=True \
     trainer.val_before_train=True \
     trainer.log_val_generations=50 \
     trainer.validation_data_dir=$VERL_VAL_OUTPUT_DIR \

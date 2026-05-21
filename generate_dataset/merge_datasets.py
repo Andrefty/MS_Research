@@ -242,15 +242,16 @@ def load_primevul(path: str) -> list[dict]:
                 else:
                     cwe_list = []
                 
+                vuln_hash = compute_vuln_hash(vuln_sample['func'])
                 samples.append({
                     "source": "primevul",
-                    "pair_id": f"primevul_{project}_{commit_id}_{func_name}",
+                    "pair_id": f"primevul_{project}_{commit_id}_{func_name}_{vuln_hash}",
                     "commit_id": commit_id,
                     "project": project,
                     "project_url": project_url,
                     "func_name": func_name,
                     "filepath": filepath,
-                    "vuln_hash": compute_vuln_hash(vuln_sample['func']),
+                    "vuln_hash": vuln_hash,
                     "vuln_func": vuln_sample['func'],
                     "patched_func": patched_sample['func'],
                     "cve": cve_list,
@@ -327,15 +328,16 @@ def load_sven(paths: list[str]) -> list[dict]:
             vul_type = row.get('vul_type', '')
             cwe_list = [vul_type.upper()] if vul_type else []
             
+            vuln_hash = compute_vuln_hash(row['func_src_before'])
             samples.append({
                 "source": "sven",
-                "pair_id": f"sven_{project}_{commit_id}_{func_name}",
+                "pair_id": f"sven_{project}_{commit_id}_{func_name}_{vuln_hash}",
                 "commit_id": commit_id,
                 "project": project,
                 "project_url": f"https://{row['commit_link'].split('/commit/')[0]}" if '/commit/' in row['commit_link'] else None,
                 "func_name": func_name,
                 "filepath": row.get('file_name', ''),
-                "vuln_hash": compute_vuln_hash(row['func_src_before']),
+                "vuln_hash": vuln_hash,
                 "vuln_func": row['func_src_before'],
                 "patched_func": row['func_src_after'],
                 "cve": [],  # SVEN doesn't have CVE
@@ -589,15 +591,16 @@ def load_secvuleval(paths: list[str]) -> list[dict]:
                 cm = str(cm).strip()
                 commit_message = cm if cm.lower() not in ['none', 'null', ''] else ''
             
+            vuln_hash = compute_vuln_hash(vuln_func)
             samples.append({
                 "source": "secvuleval",
-                "pair_id": f"secvuleval_{project}_{commit_id}_{func_name}",
+                "pair_id": f"secvuleval_{project}_{commit_id}_{func_name}_{vuln_hash}",
                 "commit_id": commit_id,
                 "project": project,
                 "project_url": vuln_row.get('project_url', ''),
                 "func_name": func_name,
                 "filepath": filepath,
-                "vuln_hash": compute_vuln_hash(vuln_func),
+                "vuln_hash": vuln_hash,
                 "vuln_func": vuln_func,
                 "patched_func": patched_func,
                 "cve": list(cve_list),

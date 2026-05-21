@@ -23,10 +23,10 @@ from utils.response_parser import parse_model_response as _parse, ParseResult
 def parse_model_response(response_text: str):
     """
     Parse model response to extract classification and vulnerable lines.
-    Returns (classification, vulnerable_lines, parse_status)
+    Returns (classification, important_lines, parse_status)
     """
     result = _parse(response_text)
-    return result.classification, result.vulnerable_lines, result.status
+    return result.classification, result.important_lines, result.status
 
 
 def analyze_responses(input_file: str, prompt_type_filter: str = None):

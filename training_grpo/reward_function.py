@@ -49,7 +49,7 @@ def compute_reward(
     Compute multi-level reward for GRPO training.
     
     Reward tiers:
-    - 1.0: Correct classification + ≥50% vulnerable lines correct
+    - 1.0: Correct classification + ≥50% important lines correct
     - 0.6: Correct classification only
     - 0.3: Some correct lines but wrong classification
     - 0.05: Response has valid JSON but wrong classification and no correct lines
@@ -58,7 +58,7 @@ def compute_reward(
     Args:
         response: Model's generated response text
         is_vulnerable: Ground truth - whether the code is vulnerable
-        ground_truth_lines: List of line numbers that are vulnerable
+        ground_truth_lines: List of line numbers that are either vulnerable or fixes, with new modifications "important_lines"
         
     Returns:
         Reward value between 0.0 and 1.0
@@ -66,7 +66,7 @@ def compute_reward(
     # Parse response - get full result for status check
     result = parse_model_response_full(response)
     classification = result.classification
-    predicted_lines = result.vulnerable_lines
+    predicted_lines = result.important_lines
     
     # Debug: log first few calls to show exactly what we're parsing
     if _log_first[0]:
@@ -289,23 +289,23 @@ if __name__ == "__main__":
     # Test cases for tiered reward system
     test_cases = [
         # Correct classification + correct lines -> 1.0
-        ('<think>analysis</think>{"classification": "VULNERABLE", "vulnerable_lines": [5, 7, 10], "reasoning_summary": "..."}',
+        ('<think>analysis</think>{"classification": "VULNERABLE", "important_lines": [5, 7, 10], "reasoning_summary": "..."}',
          True, [5, 7], 1.0),
         
         # Correct classification + partial lines -> 0.6
-        ('<think>analysis</think>{"classification": "VULNERABLE", "vulnerable_lines": [5], "reasoning_summary": "..."}',
+        ('<think>analysis</think>{"classification": "VULNERABLE", "important_lines": [5], "reasoning_summary": "..."}',
          True, [5, 7, 10], 0.6),
         
         # Correct classification, no lines needed -> 1.0
-        ('<think>analysis</think>{"classification": "NOT_VULNERABLE", "vulnerable_lines": [], "reasoning_summary": "..."}',
+        ('<think>analysis</think>{"classification": "NOT_VULNERABLE", "important_lines": [], "reasoning_summary": "..."}',
          False, [], 1.0),
         
         # Wrong classification, some lines correct -> 0.3
-        ('<think>analysis</think>{"classification": "NOT_VULNERABLE", "vulnerable_lines": [5, 7], "reasoning_summary": "..."}',
+        ('<think>analysis</think>{"classification": "NOT_VULNERABLE", "important_lines": [5, 7], "reasoning_summary": "..."}',
          True, [5, 7, 10], 0.3),
         
         # Wrong classification, no correct lines, but valid JSON -> 0.05
-        ('<think>analysis</think>{"classification": "VULNERABLE", "vulnerable_lines": [1, 2], "reasoning_summary": "..."}',
+        ('<think>analysis</think>{"classification": "VULNERABLE", "important_lines": [1, 2], "reasoning_summary": "..."}',
          False, [], 0.05),
         
         # No JSON, incomplete thinking -> 0.0
@@ -322,7 +322,7 @@ if __name__ == "__main__":
     # Test veRL compute_score interface
     print("\nTesting veRL compute_score interface:")
     ground_truth = json.dumps({"is_vulnerable": True, "ground_truth_lines": [5, 7]})
-    response = '<think>done</think>{"classification": "VULNERABLE", "vulnerable_lines": [5, 7], "reasoning_summary": "test"}'
+    response = '<think>done</think>{"classification": "VULNERABLE", "important_lines": [5, 7], "reasoning_summary": "test"}'
     score = compute_score("vulnerability_detection", response, ground_truth)
     print(f"  Score: {score} (expected 1.0)")
 

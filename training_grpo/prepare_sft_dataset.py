@@ -2,47 +2,96 @@
 """
 Prepare SFT dataset from GRPO generation output.
 Converts the generated teacher responses into SFT training format.
+
+Key design: SFT prompts are HINT-FREE (identical to eval prompts).
+The teacher's response was generated WITH hints for better reasoning quality,
+but the student model learns to produce similar reasoning WITHOUT hints.
+This aligns SFT training distribution with evaluation.
+
+The merged dataset is loaded by pair_id to regenerate hint-free prompts
+from the original code, rather than copying the teacher's hint-rich prompt.
 """
 
 import json
 import argparse
+import sys
+import os
 from pathlib import Path
 from tqdm import tqdm
 
+# Add parent directory to path for imports
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-def prepare_sft_dataset(input_file: str, output_file: str, max_samples: int = None):
+from generate_dataset.generate_finetuning_dataset_grpo import format_prompt_for_model_grpo
+
+
+def load_jsonl(file_path: str) -> list:
+    """Load JSONL file into list of dicts."""
+    samples = []
+    with open(file_path, 'r', encoding='utf-8') as f:
+        for line in f:
+            if line.strip():
+                samples.append(json.loads(line))
+    return samples
+
+
+def build_merged_index(merged_file: str) -> dict:
+    """Build a pair_id -> sample lookup index from the merged dataset.
+    
+    pair_id is guaranteed unique (includes vuln_hash since the uniqueness fix).
+    """
+    index = {}
+    samples = load_jsonl(merged_file)
+    for sample in samples:
+        pair_id = sample['pair_id']
+        if pair_id in index:
+            raise ValueError(f"Duplicate pair_id in merged dataset: {pair_id}. This should be unique!")
+        index[pair_id] = sample
+    print(f"Built merged dataset index: {len(index)} entries")
+    return index
+
+
+def prepare_sft_dataset(input_file: str, output_file: str, merged_file: str,
+                        max_samples: int = None):
     """
     Convert GRPO generation output to SFT training format.
     
     Input format (from generate_finetuning_dataset_grpo.py):
     {
+        "pair_id": str,
         "commit_id": str,
         "source": str,
         "is_vulnerable": bool,
         "code": str,
-        "prompt": str,
-        "generated_response": str,  # Teacher response from Qwen3-32B
+        "prompt": str,              # Teacher prompt (WITH hints) — NOT used for SFT
+        "generated_response": str,  # Teacher response from Qwen3-32B — kept as SFT target
         "ground_truth_lines": list[int],
         "parsed_classification": str,
-        "parsed_vulnerable_lines": list[int]
+        "parsed_important_lines": list[int]
     }
     
     Output format for SFT training:
     {
-        "prompt": str,
-        "response": str,
+        "prompt": str,              # Hint-free prompt (same format as eval)
+        "response": str,            # Teacher's response (generated WITH hints)
         "is_vulnerable": bool,
+        "pair_id": str,
         "commit_id": str,
         "ground_truth_lines": list[int]
     }
     """
     
-    print(f"Loading input file: {input_file}")
+    # Load merged dataset index for pair_id lookups
+    print(f"Loading merged dataset: {merged_file}")
+    merged_index = build_merged_index(merged_file)
+    
+    print(f"Loading teacher generation output: {input_file}")
     
     samples = []
     skipped_errors = 0
     skipped_no_response = 0
     skipped_incomplete = 0  # Missing </think> or failed parsing
+    skipped_no_pair = 0     # pair_id not found in merged dataset
     
     with open(input_file, 'r', encoding='utf-8') as f:
         for line in tqdm(f, desc="Processing samples"):
@@ -71,11 +120,33 @@ def prepare_sft_dataset(input_file: str, output_file: str, max_samples: int = No
                 skipped_incomplete += 1
                 continue
             
+            # Look up original sample from merged dataset
+            pair_id = data.get('pair_id', '')
+            if pair_id not in merged_index:
+                skipped_no_pair += 1
+                continue
+            
+            source_sample = merged_index[pair_id]
+            is_vulnerable = data['is_vulnerable']
+            
+            # Get the code from the source sample
+            code = source_sample['vuln_func'] if is_vulnerable else source_sample['patched_func']
+            
+            # Generate hint-free prompt (same format as eval)
+            hint_free_prompt = format_prompt_for_model_grpo(
+                code_snippet=code,
+                sample=source_sample,
+                is_vulnerable=None,  # Unknown = no hints
+                ground_truth_lines=None,
+                include_hints=False
+            )
+            
             # Create SFT training sample
             sft_sample = {
-                "prompt": data['prompt'],
+                "prompt": hint_free_prompt,
                 "response": response,
-                "is_vulnerable": data['is_vulnerable'],
+                "is_vulnerable": is_vulnerable,
+                "pair_id": pair_id,
                 "commit_id": data['commit_id'],
                 "ground_truth_lines": data.get('ground_truth_lines', [])
             }
@@ -89,6 +160,7 @@ def prepare_sft_dataset(input_file: str, output_file: str, max_samples: int = No
     print(f"Skipped (JSON errors): {skipped_errors}")
     print(f"Skipped (no/error response): {skipped_no_response}")
     print(f"Skipped (incomplete/unparseable): {skipped_incomplete}")
+    print(f"Skipped (pair_id not found): {skipped_no_pair}")
     
     # Save output
     output_path = Path(output_file)
@@ -131,12 +203,15 @@ def main():
                         help="Path to GRPO generation output (grpo_finetuning_dataset.jsonl)")
     parser.add_argument("--output_file", type=str, required=True,
                         help="Path to save SFT dataset")
+    parser.add_argument("--merged_dataset", type=str, required=True,
+                        help="Path to merged dataset (Research_merged_dataset/merged_train.jsonl)")
     parser.add_argument("--max_samples", type=int, default=None,
                         help="Maximum number of samples to process (for testing)")
     
     args = parser.parse_args()
     
-    prepare_sft_dataset(args.input_file, args.output_file, args.max_samples)
+    prepare_sft_dataset(args.input_file, args.output_file, args.merged_dataset,
+                        args.max_samples)
 
 
 if __name__ == "__main__":

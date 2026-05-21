@@ -8,7 +8,7 @@ across all scripts (training, evaluation, dataset generation).
 Expected response format (after thinking):
 {
     "classification": "VULNERABLE" or "NOT_VULNERABLE",
-    "vulnerable_lines": [line_numbers...],
+    "important_lines": [line_numbers...],
     "reasoning_summary": "..."
 }
 """
@@ -21,7 +21,7 @@ from typing import Tuple, List, Optional, NamedTuple
 class ParseResult(NamedTuple):
     """Result of parsing a model response."""
     classification: Optional[str]  # "VULNERABLE", "NOT_VULNERABLE", or None
-    vulnerable_lines: List[int]
+    important_lines: List[int]
     status: str  # "VALID", "NO_JSON", "INVALID_JSON", "NO_CLASSIFICATION", etc.
     raw_json: Optional[dict]  # The parsed JSON dict if successful
 
@@ -91,9 +91,9 @@ def extract_json_from_response(response_text: str) -> Optional[dict]:
     if class_match:
         classification = class_match.group(1).upper()
         
-        # Try to find vulnerable_lines
+        # Try to find important_lines
         lines_match = re.search(
-            r'"vulnerable_lines"\s*:\s*\[([\d,\s]*)\]',
+            r'"important_lines"\s*:\s*\[([\d,\s]*)\]',
             text
         )
         lines = []
@@ -103,7 +103,7 @@ def extract_json_from_response(response_text: str) -> Optional[dict]:
         
         return {
             'classification': classification,
-            'vulnerable_lines': lines,
+            'important_lines': lines,
             'reasoning_summary': '[extracted via regex fallback]',
             '_regex_fallback': True  # Mark as regex-extracted for status tracking
         }
@@ -137,7 +137,7 @@ def parse_model_response(
     include_raw_json: bool = False
 ) -> ParseResult:
     """
-    Parse model response to extract classification and vulnerable lines.
+    Parse model response to extract classification and important lines.
     
     This is the main entry point for parsing responses.
     
@@ -182,23 +182,23 @@ def parse_model_response(
             json_data if include_raw_json else None
         )
     
-    # Extract vulnerable lines
-    vulnerable_lines = []
-    raw_lines = json_data.get('vulnerable_lines', [])
+    # Extract important lines
+    important_lines = []
+    raw_lines = json_data.get('important_lines', [])
     
     if isinstance(raw_lines, list):
         for item in raw_lines:
             if isinstance(item, (int, float)):
-                vulnerable_lines.append(int(item))
+                important_lines.append(int(item))
             elif isinstance(item, str) and item.isdigit():
-                vulnerable_lines.append(int(item))
+                important_lines.append(int(item))
     
     # Determine status - VALID for clean JSON, REGEX_FALLBACK for regex-extracted
     status = "REGEX_FALLBACK" if json_data.get('_regex_fallback') else "VALID"
     
     return ParseResult(
         classification,
-        vulnerable_lines,
+        important_lines,
         status,
         json_data if include_raw_json else None
     )
@@ -209,7 +209,7 @@ def parse_for_reward(response_text: str) -> Tuple[Optional[str], List[int]]:
     Simple interface for reward function (backward compatible).
     
     Returns:
-        (classification, vulnerable_lines) tuple
+        (classification, important_lines) tuple
         Returns (None, []) for invalid statuses including REGEX_FALLBACK
     """
     result = parse_model_response(response_text)
@@ -219,7 +219,7 @@ def parse_for_reward(response_text: str) -> Tuple[Optional[str], List[int]]:
     if result.status != "VALID":
         return None, []
     
-    return result.classification, result.vulnerable_lines
+    return result.classification, result.important_lines
 
 
 def parse_for_metrics(response_text: str) -> Tuple[Optional[int], Optional[List[int]]]:
@@ -227,7 +227,7 @@ def parse_for_metrics(response_text: str) -> Tuple[Optional[int], Optional[List[
     Interface for compute_metrics.py (backward compatible).
     
     Returns:
-        (prediction, vulnerable_lines) where prediction is 0, 1, or None
+        (prediction, important_lines) where prediction is 0, 1, or None
     """
     result = parse_model_response(response_text)
     
@@ -239,7 +239,7 @@ def parse_for_metrics(response_text: str) -> Tuple[Optional[int], Optional[List[
         return None, None
     
     prediction = 1 if result.classification == "VULNERABLE" else 0
-    return prediction, result.vulnerable_lines
+    return prediction, result.important_lines
 
 
 # Alias for backward compatibility
@@ -253,17 +253,17 @@ if __name__ == "__main__":
     test_cases = [
         # Standard valid JSON with </think>
         (
-            '<think>Analysis...</think>\n{"classification": "VULNERABLE", "vulnerable_lines": [57], "reasoning_summary": "Buffer overflow"}',
+            '<think>Analysis...</think>\n{"classification": "VULNERABLE", "important_lines": [57], "reasoning_summary": "Buffer overflow"}',
             "VULNERABLE", [57], "VALID"
         ),
         # JSON with curly braces in string (the bug case)
         (
-            '<think>...</think>\n{"classification": "VULNERABLE", "vulnerable_lines": [57], "reasoning_summary": "tensor shape {N, num_updates / N}"}',
+            '<think>...</think>\n{"classification": "VULNERABLE", "important_lines": [57], "reasoning_summary": "tensor shape {N, num_updates / N}"}',
             "VULNERABLE", [57], "VALID"
         ),
         # NOT_VULNERABLE with </think>
         (
-            '<think>Safe code analysis</think>\n{"classification": "NOT_VULNERABLE", "vulnerable_lines": [], "reasoning_summary": "Safe code"}',
+            '<think>Safe code analysis</think>\n{"classification": "NOT_VULNERABLE", "important_lines": [], "reasoning_summary": "Safe code"}',
             "NOT_VULNERABLE", [], "VALID"
         ),
         # No JSON after </think> - returns NO_JSON (keyword fallback removed)
@@ -273,7 +273,7 @@ if __name__ == "__main__":
         ),
         # No </think> tag - returns INCOMPLETE (now required)
         (
-            '{"classification": "NOT_VULNERABLE", "vulnerable_lines": []}',
+            '{"classification": "NOT_VULNERABLE", "important_lines": []}',
             None, [], "INCOMPLETE"
         ),
         # Empty
@@ -291,7 +291,7 @@ if __name__ == "__main__":
         
         passed = (
             result.classification == exp_class and
-            result.vulnerable_lines == exp_lines and
+            result.important_lines == exp_lines and
             result.status == exp_status
         )
         
@@ -302,7 +302,7 @@ if __name__ == "__main__":
         print(f"{status} Test {i+1}:")
         print(f"  Input: {text[:80]}...")
         print(f"  Expected: class={exp_class}, lines={exp_lines}, status={exp_status}")
-        print(f"  Got:      class={result.classification}, lines={result.vulnerable_lines}, status={result.status}")
+        print(f"  Got:      class={result.classification}, lines={result.important_lines}, status={result.status}")
         print()
     
     print("=" * 60)

@@ -174,7 +174,7 @@ echo "========================================"
         --sglang_port "$SGLANG_PORT" \
         --prompts training std_cls \
         --concurrency 8 \
-        --temperature 0.6 \
+        --temperature 0.4 \
         --top_p 0.95 \
         --top_k 20 \
         --max_gen_length 32768

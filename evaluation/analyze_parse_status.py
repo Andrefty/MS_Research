@@ -72,7 +72,7 @@ def analyze_file(filepath: str, save_path: str = None, verbose: bool = False):
                 # Add parse metadata to the sample
                 data['_parse_status'] = result.status
                 data['_parse_classification'] = result.classification
-                data['_parse_lines'] = result.vulnerable_lines
+                data['_parse_lines'] = result.important_lines
                 data['_line_number'] = i + 1
                 non_valid_samples.append(data)
     
