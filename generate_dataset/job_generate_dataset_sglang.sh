@@ -19,7 +19,7 @@ SGLANG_HOST="127.0.0.1"
 LOG_DIR="$WORK_DIR/inference_experiment/logs" # Centralized log directory
 SLURM_LOG_DIR="$LOG_DIR/slurm_logs"
 SGLANG_LOG_FILE="$LOG_DIR/sglang_server-${SLURM_JOB_ID}.log"
-EVAL_LOG_FILE="$LOG_DIR/eval_script-${SLURM_JOB_ID}.log"
+EVAL_LOG_FILE="$LOG_DIR/inference_generate_dataset-${SLURM_JOB_ID}.log"
 
 # --- Setup ---
 mkdir -p "$SLURM_LOG_DIR"

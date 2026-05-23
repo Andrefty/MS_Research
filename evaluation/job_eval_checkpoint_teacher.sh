@@ -1,5 +1,5 @@
 #!/bin/bash
-#SBATCH --job-name=eval-base
+#SBATCH --job-name=eval-qwen3_32b_base
 #SBATCH --output=/export/home/acs/stud/t/tudor.farcasanu/SSL_research/logs/eval_%j.out
 #SBATCH --error=/export/home/acs/stud/t/tudor.farcasanu/SSL_research/logs/eval_%j.err
 #SBATCH --ntasks=1
