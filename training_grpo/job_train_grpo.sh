@@ -168,7 +168,7 @@ python -m verl.trainer.main_ppo \
     trainer.n_gpus_per_node=$NUM_GPUS \
     trainer.resume_mode=auto \
     trainer.nnodes=1 \
-    trainer.save_freq=60 \
+    trainer.save_freq=90 \
     +trainer.remove_previous_ckpt_in_save=True \
     trainer.del_local_ckpt_after_load=True \
     trainer.val_before_train=True \

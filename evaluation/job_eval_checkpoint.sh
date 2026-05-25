@@ -159,38 +159,62 @@ echo "========================================"
         echo "Eval dataset already exists: $EVAL_DATASET"
     fi
     
-    # Step 2: Run inference
-    echo ""
-    echo "Step 2: Running inference (both prompts)..."
-    RESPONSES_FILE="$OUTPUT_DIR/eval_responses.jsonl"
-    python run_eval.py \
-        --eval_dataset "$EVAL_DATASET" \
-        --output_file "$RESPONSES_FILE" \
-        --sglang_host "$SGLANG_HOST" \
-        --sglang_port "$SGLANG_PORT" \
-        --prompts training std_cls \
-        --concurrency 8 \
-        --temperature 0.4 \
-        --top_p 0.95 \
-        --top_k 20 \
-        --max_gen_length 32768
+    # --- Temperature Configuration ---
+    # Temperatures to evaluate. Comment out any you don't want to run.
+    TEMPERATURES=(
+        0.2     # Low temp: more deterministic, less variance
+        0.4     # Our default reduced temp
+        0.6     # Qwen3 recommended default
+    )
     
-    # Step 3: Compute metrics
-    echo ""
-    echo "Step 3: Computing metrics..."
-    METRICS_DIR="$OUTPUT_DIR/metrics"
-    python compute_metrics.py \
-        --input_file "$RESPONSES_FILE" \
-        --output_dir "$METRICS_DIR"
+    # --- Prompt Configuration ---
+    # Which prompts to run. "training" is our main prompt.
+    # Uncomment "std_cls" to also run the standard classification prompt.
+    EVAL_PROMPTS="training"
+    # EVAL_PROMPTS="training std_cls"
+    
+    for TEMP in "${TEMPERATURES[@]}"; do
+        TEMP_LABEL=$(echo "$TEMP" | tr '.' 'p')  # 0.4 -> 0p4
+        echo ""
+        echo "========================================"
+        echo "Running evaluation at temperature=$TEMP"
+        echo "========================================"
+        
+        RESPONSES_FILE="$OUTPUT_DIR/eval_responses_temp${TEMP_LABEL}.jsonl"
+        METRICS_DIR="$OUTPUT_DIR/metrics_temp${TEMP_LABEL}"
+        
+        # Step 2: Run inference
+        echo "Step 2: Running inference (temp=$TEMP, prompts=$EVAL_PROMPTS)..."
+        python run_eval.py \
+            --eval_dataset "$EVAL_DATASET" \
+            --output_file "$RESPONSES_FILE" \
+            --sglang_host "$SGLANG_HOST" \
+            --sglang_port "$SGLANG_PORT" \
+            --prompts $EVAL_PROMPTS \
+            --concurrency 8 \
+            --temperature $TEMP \
+            --top_p 0.95 \
+            --top_k 20 \
+            --max_gen_length 32768
+        
+        # Step 3: Compute metrics
+        echo "Step 3: Computing metrics (temp=$TEMP)..."
+        python compute_metrics.py \
+            --input_file "$RESPONSES_FILE" \
+            --output_dir "$METRICS_DIR"
+        
+        echo "Done with temp=$TEMP"
+        echo ""
+    done
     
     echo ""
     echo "========================================"
-    echo "Evaluation Complete!"
+    echo "Evaluation Complete! (all temperatures)"
     echo "========================================"
     echo "Results in: $OUTPUT_DIR"
     echo ""
-    echo "Metrics files:"
-    ls -la "$METRICS_DIR"
+    echo "Metrics directories:"
+    ls -d "$OUTPUT_DIR"/metrics_temp* 2>/dev/null
     
 ) > "$EVAL_LOG" 2>&1
 
