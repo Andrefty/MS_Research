@@ -6,7 +6,7 @@ Upload a specified directory to HuggingFace: Andrefty/qwen3-4b-vuln-sft-research
 import argparse
 import os
 from pathlib import Path
-from huggingface_hub import HfApi, CommitOperationAdd, create_repo
+from huggingface_hub import HfApi, CommitOperationAdd, CommitOperationDelete, create_repo
 
 REPO_ID = "Andrefty/qwen3-4b-vuln-sft-research"
 
@@ -77,10 +77,22 @@ def main():
             print(f"  {repo} ({os.path.getsize(local)/1e6:.2f} MB)")
     
     if not args.dry_run:
-        operations = [
+        operations = []
+        uploading_evals = any(repo_path.startswith("sft_qwen3_4b_eval_results/") for _, repo_path in all_files)
+        
+        if uploading_evals:
+            try:
+                repo_files = api.list_repo_files(repo_id=REPO_ID, repo_type="model")
+                if any(f.startswith("sft_qwen3_4b_eval_results/") for f in repo_files):
+                    operations.append(CommitOperationDelete(path_in_repo="sft_qwen3_4b_eval_results", is_folder=True))
+                    print("  🗑️ Scheduled deletion of existing 'sft_qwen3_4b_eval_results' in the remote repo.")
+            except Exception as e:
+                print(f"  ⚠️ Could not check remote files for deletion: {e}")
+
+        operations.extend([
             CommitOperationAdd(path_in_repo=repo_path, path_or_fileobj=str(local_path))
             for local_path, repo_path in all_files
-        ]
+        ])
         upload_commit(api, REPO_ID, operations, args.message)
 
     print("\n🎉 Upload complete!" if not args.dry_run else "\n✅ Dry run complete.")

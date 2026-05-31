@@ -8,7 +8,7 @@ global_step_<step> model weights + train_rollout + val_output + eval results + R
 import argparse
 import os
 from pathlib import Path
-from huggingface_hub import HfApi, CommitOperationAdd, create_repo
+from huggingface_hub import HfApi, CommitOperationAdd, CommitOperationDelete, create_repo
 
 REPO_ID = "Andrefty/qwen3-4b-vuln-grpo-verl"
 BASE_DIR = Path("/export/home/acs/stud/t/tudor.farcasanu/SSL_research/checkpoints/grpo_qwen3_4b_verl")
@@ -90,10 +90,22 @@ def main():
         print(f"  {repo} ({size:.1f} MB)")
     
     if not args.dry_run:
-        operations = [
+        operations = []
+        uploading_evals = any(repo_path.startswith("grpo_qwen3_4b_eval_results/") for _, repo_path in all_files)
+        
+        if uploading_evals:
+            try:
+                repo_files = api.list_repo_files(repo_id=REPO_ID, repo_type="model")
+                if any(f.startswith("grpo_qwen3_4b_eval_results/") for f in repo_files):
+                    operations.append(CommitOperationDelete(path_in_repo="grpo_qwen3_4b_eval_results", is_folder=True))
+                    print("  🗑️ Scheduled deletion of existing 'grpo_qwen3_4b_eval_results' in the remote repo.")
+            except Exception as e:
+                print(f"  ⚠️ Could not check remote files for deletion: {e}")
+
+        operations.extend([
             CommitOperationAdd(path_in_repo=repo_path, path_or_fileobj=str(local_path))
             for local_path, repo_path in all_files
-        ]
+        ])
         commit_msg = args.message if args.message else f"Checkpoint step {args.step} upload"
         upload_commit(api, REPO_ID, operations, commit_msg)
 
