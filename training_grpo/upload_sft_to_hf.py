@@ -20,9 +20,9 @@ def get_model_files(step_dir: Path):
 
 def upload_commit(api, repo_id, operations, commit_msg):
     print(f"\n📤 Committing: {commit_msg}")
-    print(f"   Files: {len(operations)}")
-    total_bytes = sum(os.path.getsize(op.path_or_fileobj) for op in operations)
-    print(f"   Total size: {total_bytes / 1e9:.2f} GB")
+    print(f"   Operations: {len(operations)}")
+    total_bytes = sum(os.path.getsize(op.path_or_fileobj) for op in operations if hasattr(op, 'path_or_fileobj'))
+    print(f"   Total upload size: {total_bytes / 1e9:.2f} GB")
     
     api.create_commit(
         repo_id=repo_id,

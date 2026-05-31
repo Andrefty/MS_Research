@@ -31,14 +31,14 @@ def get_metrics(base_dir):
                     # Extracting relevant metrics
                     metrics = {
                         "Run": run_name,
-                        "Acc": f"{data.get('standard_metrics', {}).get('accuracy', 0):.4f}",
-                        "F1": f"{data.get('standard_metrics', {}).get('f1_score', 0):.4f}",
-                        "P-C": f"{data.get('pairwise_metrics', {}).get('P-C_ratio', 0):.4f}",
-                        "P-V": f"{data.get('pairwise_metrics', {}).get('P-V_ratio', 0):.4f}",
-                        "P-B": f"{data.get('pairwise_metrics', {}).get('P-B_ratio', 0):.4f}",
-                        "P-R": f"{data.get('pairwise_metrics', {}).get('P-R_ratio', 0):.4f}",
-                        "Loc F1": f"{data.get('line_localization_metrics', {}).get('avg_f1', 0):.4f}",
-                        "Loc P/R": f"{data.get('line_localization_metrics', {}).get('avg_precision', 0):.4f}/{data.get('line_localization_metrics', {}).get('avg_recall', 0):.4f}",
+                        "Acc": f"{data.get('standard_metrics', {}).get('accuracy', 0):.6f}",
+                        "F1": f"{data.get('standard_metrics', {}).get('f1_score', 0):.6f}",
+                        "P-C": f"{data.get('pairwise_metrics', {}).get('P-C_ratio', 0):.6f}",
+                        "P-V": f"{data.get('pairwise_metrics', {}).get('P-V_ratio', 0):.6f}",
+                        "P-B": f"{data.get('pairwise_metrics', {}).get('P-B_ratio', 0):.6f}",
+                        "P-R": f"{data.get('pairwise_metrics', {}).get('P-R_ratio', 0):.6f}",
+                        "Loc F1": f"{data.get('line_localization_metrics', {}).get('avg_f1', 0):.6f}",
+                        "Loc P/R": f"{data.get('line_localization_metrics', {}).get('avg_precision', 0):.6f}/{data.get('line_localization_metrics', {}).get('avg_recall', 0):.6f}",
                         "Parseable": f"{data.get('parseable_samples', 0)}/{data.get('total_samples', 0)}"
                     }
                     results.append(metrics)
