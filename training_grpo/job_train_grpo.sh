@@ -148,7 +148,7 @@ python -m verl.trainer.main_ppo \
     actor_rollout_ref.rollout.max_num_batched_tokens=41960 \
     actor_rollout_ref.rollout.max_num_seqs=64 \
     actor_rollout_ref.rollout.enable_chunked_prefill=True \
-    actor_rollout_ref.rollout.temperature=1.0 \
+    actor_rollout_ref.rollout.temperature=0.975 \
     actor_rollout_ref.rollout.top_p=0.95 \
     actor_rollout_ref.rollout.top_k=20 \
     actor_rollout_ref.rollout.n=16 \

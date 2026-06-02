@@ -49,10 +49,11 @@ def compute_reward(
     Compute multi-level reward for GRPO training.
     
     Reward tiers:
+    - 1.25: Correct classification + ≥75% important lines correct
     - 1.0: Correct classification + ≥50% important lines correct
-    - 0.6: Correct classification only
-    - 0.3: Some correct lines but wrong classification
-    - 0.05: Response has valid JSON but wrong classification and no correct lines
+    - 0.75: Correct classification only (and by consequence <50% lines)
+    - 0.4: Some correct lines but wrong classification
+    - 0.15: Response has valid JSON but wrong classification and no correct lines
     - 0.0: No valid JSON / completely wrong format
     
     Args:
@@ -61,7 +62,7 @@ def compute_reward(
         ground_truth_lines: List of line numbers that are either vulnerable or fixes, with new modifications "important_lines"
         
     Returns:
-        Reward value between 0.0 and 1.0
+        Reward value between 0.0 and 1.25
     """
     # Parse response - get full result for status check
     result = parse_model_response_full(response)
@@ -86,7 +87,7 @@ def compute_reward(
     # SECOND: Check if classification was parsed
     if classification is None:
         # INVALID_CLASSIFICATION: valid JSON but classification string is invalid
-        return 0.05  # Partial credit for following format but wrong classification value
+        return 0.15  # Partial credit for following format but wrong classification value
     
     # From here: we have VALID status with a valid classification
     # Check classification correctness
@@ -97,14 +98,16 @@ def compute_reward(
     line_accuracy = compute_line_accuracy(predicted_lines, ground_truth_lines)
     
     # Compute reward based on tier
-    if correct_classification and line_accuracy >= 0.5:
+    if correct_classification and line_accuracy >= 0.75:
+        return 1.25
+    elif correct_classification and line_accuracy >= 0.5:
         return 1.0
     elif correct_classification:
-        return 0.6
+        return 0.75
     elif line_accuracy > 0:
-        return 0.3
+        return 0.4
     else:
-        return 0.05  # Valid format but wrong classification and no correct lines
+        return 0.15  # Valid format but wrong classification and no correct lines
 
 
 def batch_compute_rewards(
