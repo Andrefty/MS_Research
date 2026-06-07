@@ -195,7 +195,7 @@ echo "========================================"
             --sglang_host "$SGLANG_HOST" \
             --sglang_port "$SGLANG_PORT" \
             --prompts $EVAL_PROMPTS \
-            --concurrency 8 \
+            --concurrency 32 \
             --temperature $TEMP \
             --top_p 0.95 \
             --top_k 20 \

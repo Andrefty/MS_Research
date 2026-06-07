@@ -35,7 +35,7 @@ VERL_CKPT_DIR="/export/home/acs/stud/t/tudor.farcasanu/SSL_research/checkpoints/
 # Find the latest checkpoint step (reads from latest_checkpointed_iteration.txt or find latest global_step_*)
 LATEST_STEP=$(cat "$VERL_CKPT_DIR/latest_checkpointed_iteration.txt" 2>/dev/null || ls -d "$VERL_CKPT_DIR"/global_step_* 2>/dev/null | sort -V | tail -1 | xargs basename | sed 's/global_step_//')
 MODEL_PATH="$VERL_CKPT_DIR/global_step_${LATEST_STEP}/actor/huggingface"
-MODEL_NAME="grpo_qwen3_4b_verl"
+MODEL_NAME="grpo_qwen3_4b_verl_step${LATEST_STEP}"
 
 # Number of GPUs - Qwen3-4B vocab size (151936) not divisible by 3, must use 2
 NUM_GPUS=2
@@ -255,7 +255,7 @@ echo "========================================"
             --sglang_host "$SGLANG_HOST" \
             --sglang_port "$SGLANG_PORT" \
             --prompts $EVAL_PROMPTS \
-            --concurrency 8 \
+            --concurrency 32 \
             --temperature $TEMP \
             --top_p 0.95 \
             --top_k 20 \
