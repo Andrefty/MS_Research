@@ -390,7 +390,7 @@ def process_single_request(client, args, prompt, sample, is_vulnerable,
             "code": sample['vuln_func'] if is_vulnerable else sample['patched_func'],
             "prompt": prompt,
             "generated_response": generated_text,
-            "ground_truth_lines": ground_truth_lines if is_vulnerable else [],
+            "ground_truth_lines": ground_truth_lines,
             "parsed_classification": parsed_class,
             "parsed_important_lines": parsed_lines
         }
@@ -405,7 +405,7 @@ def process_single_request(client, args, prompt, sample, is_vulnerable,
             "code": sample['vuln_func'] if is_vulnerable else sample['patched_func'],
             "prompt": prompt,
             "generated_response": f"ERROR_SGLANG_CALL: {str(e)}",
-            "ground_truth_lines": ground_truth_lines if is_vulnerable else [],
+            "ground_truth_lines": ground_truth_lines,
             "parsed_classification": None,
             "parsed_important_lines": None
         }
@@ -437,7 +437,7 @@ def _get_clean_commit_msg(sample):
 
 
 def prepare_request(sample, is_vulnerable, tokenizer_obj, is_hf_tokenizer, 
-                    total_model_capacity, max_gen_length):
+                    total_model_capacity, max_gen_length, drop_commit_msg_if_cve_exists=True):
     """Prepare a request dict without making the API call.
     
     Uses dynamic token-aware commit_message inclusion:
@@ -454,7 +454,7 @@ def prepare_request(sample, is_vulnerable, tokenizer_obj, is_hf_tokenizer,
         ground_truth_lines = get_ground_truth_lines(sample)
     else:
         code = sample['patched_func']
-        ground_truth_lines = []
+        ground_truth_lines = get_added_lines(sample)
     
     # Step 1: Build base prompt WITHOUT commit message to get base token cost
     prompt_base = format_prompt_for_model_grpo(
@@ -472,10 +472,11 @@ def prepare_request(sample, is_vulnerable, tokenizer_obj, is_hf_tokenizer,
     # Step 2: Check if commit message exists and calculate token budget
     commit_msg = _get_clean_commit_msg(sample)
     
-    if not commit_msg:
-        # No commit message → use base prompt as-is
+    if not commit_msg or (drop_commit_msg_if_cve_exists and _has_cve_desc(sample)):
+        # No commit message OR (toggle ON and has CVE desc) → use base prompt as-is
         prompt = prompt_base
     else:
+        # Has commit message and (drop_commit_msg_if_cve_exists is False or No CVE desc) but has commit message -> try to fit it
         token_budget = max_prompt_budget - base_tokens
         msg_tokens = count_tokens(commit_msg, tokenizer_obj, is_hf_tokenizer)
         label_overhead = count_tokens(_COMMIT_MSG_LABEL, tokenizer_obj, is_hf_tokenizer)
@@ -488,7 +489,7 @@ def prepare_request(sample, is_vulnerable, tokenizer_obj, is_hf_tokenizer,
                 commit_msg_mode='full'
             )
         elif _has_cve_desc(sample):
-            # Has CVE desc → commit message is supplementary, drop it
+            # Has CVE desc → commit message is supplementary, drop it instead of truncating
             prompt = prompt_base
         else:
             # No CVE desc → commit message is primary context, truncate to fit
@@ -551,6 +552,10 @@ def main():
     # Concurrency settings
     parser.add_argument('--concurrency', type=int, default=DEFAULT_CONCURRENCY,
                         help=f"Number of concurrent requests (default: {DEFAULT_CONCURRENCY})")
+                        
+    # Commit message toggle
+    parser.add_argument('--drop_commit_msg_if_cve_exists', type=lambda x: (str(x).lower() == 'true'), default=True,
+                        help="If True, drop commit message if CVE description exists (default: True)")
 
     args = parser.parse_args()
 
@@ -607,7 +612,8 @@ def main():
         vuln_key = f"{commit_id}_{func_name}_{vuln_hash}_True"
         if vuln_key not in already_processed_ids:
             req = prepare_request(sample, True, tokenizer_obj, is_hf_tokenizer,
-                                  total_model_capacity, args.max_gen_length)
+                                  total_model_capacity, args.max_gen_length,
+                                  args.drop_commit_msg_if_cve_exists)
             if req:
                 pending_requests.append(req)
             else:
@@ -617,7 +623,8 @@ def main():
         patched_key = f"{commit_id}_{func_name}_{vuln_hash}_False"
         if patched_key not in already_processed_ids:
             req = prepare_request(sample, False, tokenizer_obj, is_hf_tokenizer,
-                                  total_model_capacity, args.max_gen_length)
+                                  total_model_capacity, args.max_gen_length,
+                                  args.drop_commit_msg_if_cve_exists)
             if req:
                 pending_requests.append(req)
             else:

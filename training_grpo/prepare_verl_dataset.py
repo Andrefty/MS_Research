@@ -96,19 +96,19 @@ def convert_sample(sample: dict, idx: int, merged_index: dict = None,
     is_vulnerable = sample.get("is_vulnerable", True)
     
     # Determine ground_truth_lines based on toggle
-    if is_vulnerable:
-        # Vulnerable: use deleted_lines (already in ground_truth_lines from SFT prep)
-        ground_truth_lines = sample.get("ground_truth_lines", [])
-    elif score_patched_lines and merged_index:
-        # Patched + toggle ON: look up added_lines from merged dataset
-        pair_id = sample.get("pair_id", "")
-        if pair_id in merged_index:
-            ground_truth_lines = get_added_line_numbers(merged_index[pair_id])
+    ground_truth_lines = sample.get("ground_truth_lines", [])
+    
+    if not is_vulnerable:
+        if score_patched_lines:
+            # If the jsonl already has them (new format), use them.
+            # If empty, fallback to merged dataset lookup (old format).
+            if not ground_truth_lines and merged_index:
+                pair_id = sample.get("pair_id", "")
+                if pair_id in merged_index:
+                    ground_truth_lines = get_added_line_numbers(merged_index[pair_id])
         else:
+            # Patched + toggle OFF: empty (current behavior)
             ground_truth_lines = []
-    else:
-        # Patched + toggle OFF: empty (current behavior)
-        ground_truth_lines = []
     
     # Ground truth for reward function
     ground_truth = json.dumps({
