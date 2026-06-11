@@ -41,12 +41,20 @@ cleanup() {
     echo "Cleaning up..."
     if [[ -n "$SGLANG_PID" ]] && ps -p "$SGLANG_PID" > /dev/null; then
         echo "Stopping SGLang server (PID: $SGLANG_PID)..."
-        kill "$SGLANG_PID"
+        # First send SIGTERM to the parent
+        kill "$SGLANG_PID" 2>/dev/null
+        
+        # Kill any child processes (tensor parallelism workers) that might become orphans
+        pkill -P "$SGLANG_PID" 2>/dev/null
+        
         wait "$SGLANG_PID" 2>/dev/null # Wait for server to stop
         echo "SGLang server stopped."
     else
         echo "SGLang server (PID: $SGLANG_PID) not found or already stopped."
     fi
+    
+    # As a final failsafe to clear any leftover sglang processes from this job holding GPU memory
+    pkill -u $USER -f "sglang.launch_server.*$SGLANG_PORT" 2>/dev/null
     
     # Deactivation is better handled within the subshell if it was activated there.
 }

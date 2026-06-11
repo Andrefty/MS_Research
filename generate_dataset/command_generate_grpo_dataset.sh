@@ -28,7 +28,7 @@ LOGPROBS_PARAM="False"
 ENABLE_THINKING_PARAM="True"
 
 # Concurrency for parallel request processing
-CONCURRENCY_PARAM="8"
+CONCURRENCY_PARAM="32"
 
 echo "Running generate_finetuning_dataset_grpo.py..."
 echo "Input file: $INPUT_FILE_PARAM"
