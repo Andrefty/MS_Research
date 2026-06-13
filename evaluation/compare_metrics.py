@@ -3,6 +3,9 @@ import os
 import glob
 import argparse
 
+import collections
+import re
+
 def get_metrics(base_dir, run_type="all", filter_str=None):
     results = []
     
@@ -45,8 +48,10 @@ def get_metrics(base_dir, run_type="all", filter_str=None):
                     
                     run_name = run_name_base
                     metrics_dirname = os.path.basename(m_dir)
+                    temp = "default"
                     if metrics_dirname != "metrics":
-                        run_name += f" ({metrics_dirname.replace('metrics_', '')})"
+                        temp = metrics_dirname.replace('metrics_', '')
+                        run_name += f" ({temp})"
                         
                     # Also apply filter on combined run_name just in case
                     if filter_str and filter_str.lower() not in run_name.lower():
@@ -55,6 +60,8 @@ def get_metrics(base_dir, run_type="all", filter_str=None):
                     # Extracting relevant metrics
                     metrics = {
                         "Run": run_name,
+                        "BaseRun": run_name_base,
+                        "Temp": temp,
                         "Acc": data.get('standard_metrics', {}).get('accuracy', 0),
                         "F1": data.get('standard_metrics', {}).get('f1_score', 0),
                         "P-C": data.get('pairwise_metrics', {}).get('P-C_ratio', 0),
@@ -62,7 +69,6 @@ def get_metrics(base_dir, run_type="all", filter_str=None):
                         "P-B": data.get('pairwise_metrics', {}).get('P-B_ratio', 0),
                         "P-R": data.get('pairwise_metrics', {}).get('P-R_ratio', 0),
                         "Loc F1": data.get('line_localization_metrics', {}).get('avg_f1', 0),
-                        #"Loc P/R": f"{data.get('line_localization_metrics', {}).get('avg_precision', 0):.6f}/{data.get('line_localization_metrics', {}).get('avg_recall', 0):.6f}",
                         "Parseable": f"{data.get('parseable_samples', 0)}/{data.get('total_samples', 0)}"
                     }
                     results.append(metrics)
@@ -70,6 +76,40 @@ def get_metrics(base_dir, run_type="all", filter_str=None):
                     print(f"Error reading {metrics_path}: {e}")
                     
     return results
+
+def aggregate_metrics(results):
+    groups = collections.defaultdict(list)
+    for r in results:
+        base_name = r['BaseRun']
+        temp = r['Temp']
+        # Strip _run1, _run2, _run3, _run2_concur32 etc.
+        series_name = re.sub(r'_run\d+(_evenworse|_worse|_concur\d+)?', '', base_name)
+        groups[(series_name, temp)].append(r)
+        
+    aggregated = []
+    for (series, temp), runs in groups.items():
+        if not runs: continue
+        
+        agg = {
+            "Series": series,
+            "Temp": temp,
+            "RunCount": len(runs),
+            "Runs": [r["Run"] for r in runs]
+        }
+        
+        for metric in ["Acc", "F1", "P-C", "P-V", "P-B", "P-R", "Loc F1"]:
+            vals = [r[metric] for r in runs if isinstance(r[metric], (int, float))]
+            if vals:
+                agg[f"{metric}_mean"] = sum(vals) / len(vals)
+                agg[f"{metric}_max"] = max(vals)
+                agg[f"{metric}_min"] = min(vals)
+                agg[f"{metric}_max_spread"] = max(vals) - min(vals)
+            else:
+                agg[f"{metric}_mean"] = 0
+                
+        aggregated.append(agg)
+        
+    return aggregated
 
 def print_table(results, sort_by=None, limit=None, reverse=False):
     if not results:
@@ -101,6 +141,8 @@ def print_table(results, sort_by=None, limit=None, reverse=False):
     for r in results:
         formatted_row = {}
         for k, v in r.items():
+            if k == "BaseRun":
+                continue
             if isinstance(v, float):
                 formatted_row[k] = f"{v:.6f}"
             else:
@@ -131,6 +173,9 @@ if __name__ == "__main__":
     parser.add_argument("--sort", type=str, default=None, help="Metric to sort by (e.g., 'Acc', 'F1', 'P-C', 'Run')")
     parser.add_argument("--desc", action="store_true", help="Sort in descending order (useful for sorting by best metric first)")
     parser.add_argument("--limit", type=int, default=None, help="Limit the number of results to show")
+    parser.add_argument("--json", action="store_true", help="Output results in JSON format")
+    parser.add_argument("--output", type=str, default=None, help="File path to save the output")
+    parser.add_argument("--aggregate", action="store_true", help="Aggregate metrics across runs of the same model series")
     
     args = parser.parse_args()
     
@@ -143,4 +188,48 @@ if __name__ == "__main__":
         types = ["all"]
         
     results = get_metrics(args.base_dir, run_type=types, filter_str=args.filter)
-    print_table(results, sort_by=args.sort, limit=args.limit, reverse=args.desc)
+    
+    if args.aggregate:
+        agg_results = aggregate_metrics(results)
+        if args.sort:
+            sort_key = f"{args.sort}_mean" if f"{args.sort}_mean" in agg_results[0] else args.sort
+            agg_results = sorted(agg_results, key=lambda x: x.get(sort_key, 0), reverse=args.desc)
+        if args.limit:
+            agg_results = agg_results[:args.limit]
+            
+        if args.json:
+            output_str = json.dumps(agg_results, indent=2)
+            if args.output:
+                with open(args.output, 'w') as f:
+                    f.write(output_str)
+                print(f"Aggregated results saved to {args.output}")
+            else:
+                print(output_str)
+        else:
+            # simple print of aggregated
+            print(json.dumps(agg_results, indent=2))
+            
+    else:
+        # Standard results
+        if args.sort:
+            def sort_key_func(row):
+                val = row.get(args.sort, 0)
+                if isinstance(val, str) and "/" in val and args.sort != "Run":
+                    try: return float(val.split("/")[0])
+                    except: pass
+                return val if val is not None else 0
+            results = sorted(results, key=sort_key_func, reverse=args.desc)
+            
+        if args.limit:
+            results = results[:args.limit]
+            
+        if args.json:
+            output_str = json.dumps(results, indent=2)
+            if args.output:
+                with open(args.output, 'w') as f:
+                    f.write(output_str)
+                print(f"Results saved to {args.output}")
+            else:
+                print(output_str)
+        else:
+            print_table(results, sort_by=None, limit=None, reverse=False)

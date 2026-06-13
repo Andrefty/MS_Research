@@ -6,6 +6,12 @@ Computes multi-level rewards based on classification accuracy and line matching.
 Supports both:
 - TRL GRPOTrainer (reward_function_for_grpo)
 - veRL trainer (compute_score)
+
+Spray guard (optional):
+  Set env GRPO_SPRAY_THRESHOLD to a positive integer to enable.
+  When enabled, if the model predicts more lines than this threshold,
+  only the classification reward is given (line bonus is zeroed out).
+  Disabled by default (GRPO_SPRAY_THRESHOLD=0 or unset).
 """
 
 import sys
@@ -17,6 +23,9 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from typing import Tuple, List, Optional
 from utils.response_parser import parse_model_response as parse_model_response_full
+
+# Spray guard threshold — read once at import time (0 = disabled)
+_SPRAY_THRESHOLD = int(os.environ.get('GRPO_SPRAY_THRESHOLD', '0'))
 
 
 
@@ -49,12 +58,16 @@ def compute_reward(
     Compute multi-level reward for GRPO training.
     
     Reward tiers:
-    - 1.25: Correct classification + ≥75% important lines correct
     - 1.0: Correct classification + ≥50% important lines correct
     - 0.75: Correct classification only (and by consequence <50% lines)
-    - 0.4: Some correct lines but wrong classification
-    - 0.15: Response has valid JSON but wrong classification and no correct lines
+    - 0.3: Some correct lines but wrong classification
+    - 0.1: Response has valid JSON but wrong classification and no correct lines
     - 0.0: No valid JSON / completely wrong format
+    
+    Spray guard (optional, off by default):
+      If GRPO_SPRAY_THRESHOLD env var is set to a positive integer and
+      len(predicted_lines) > that threshold, the line bonus is zeroed out —
+      only classification reward (0.75 or 0.1) is given.
     
     Args:
         response: Model's generated response text
@@ -62,7 +75,7 @@ def compute_reward(
         ground_truth_lines: List of line numbers that are either vulnerable or fixes, with new modifications "important_lines"
         
     Returns:
-        Reward value between 0.0 and 1.25
+        Reward value between 0.0 and 1.0
     """
     # Parse response - get full result for status check
     result = parse_model_response_full(response)
@@ -77,6 +90,7 @@ def compute_reward(
         print(f"[compute_reward DEBUG] Parse status: {result.status}", flush=True)
         print(f"[compute_reward DEBUG] Parsed classification: {classification}", flush=True)
         print(f"[compute_reward DEBUG] Parsed lines: {predicted_lines}", flush=True)
+        print(f"[compute_reward DEBUG] Spray threshold: {_SPRAY_THRESHOLD}", flush=True)
     
     # FIRST: Check if response is VALID JSON
     # Only truly valid JSON responses deserve rewards
@@ -87,27 +101,31 @@ def compute_reward(
     # SECOND: Check if classification was parsed
     if classification is None:
         # INVALID_CLASSIFICATION: valid JSON but classification string is invalid
-        return 0.15  # Partial credit for following format but wrong classification value
+        return 0.1  # Partial credit for following format but wrong classification value
     
     # From here: we have VALID status with a valid classification
     # Check classification correctness
     expected_class = "VULNERABLE" if is_vulnerable else "NOT_VULNERABLE"
     correct_classification = (classification == expected_class)
     
-    # Compute line accuracy
-    line_accuracy = compute_line_accuracy(predicted_lines, ground_truth_lines)
+    # Spray guard: if enabled and model predicts too many lines, only give classification reward
+    sprayed = (_SPRAY_THRESHOLD > 0 and predicted_lines and len(predicted_lines) > _SPRAY_THRESHOLD)
+    
+    # Compute line accuracy (skip if sprayed — treat as no line bonus)
+    if sprayed:
+        line_accuracy = 0.0
+    else:
+        line_accuracy = compute_line_accuracy(predicted_lines, ground_truth_lines)
     
     # Compute reward based on tier
-    if correct_classification and line_accuracy >= 0.75:
-        return 1.25
-    elif correct_classification and line_accuracy >= 0.5:
+    if correct_classification and line_accuracy >= 0.5:
         return 1.0
     elif correct_classification:
         return 0.75
     elif line_accuracy > 0:
-        return 0.4
+        return 0.3
     else:
-        return 0.15  # Valid format but wrong classification and no correct lines
+        return 0.1  # Valid format but wrong classification and no correct lines
 
 
 def batch_compute_rewards(
@@ -233,7 +251,7 @@ def compute_score(data_source: str, solution_str: str, ground_truth: str, extra_
         extra_info: Optional additional metadata
     
     Returns:
-        float: Reward value (0.0, 0.05, 0.3, 0.6, or 1.0)
+        float: Reward value (0.0, 0.1, 0.3, 0.75, or 1.0)
     """
     # Parse ground truth
     try:
@@ -289,15 +307,16 @@ def compute_score(data_source: str, solution_str: str, ground_truth: str, extra_
 
 
 if __name__ == "__main__":
+    print(f"Spray threshold: {_SPRAY_THRESHOLD}")
     # Test cases for tiered reward system
     test_cases = [
-        # Correct classification + correct lines -> 1.0
+        # Correct classification + ≥50% correct lines -> 1.0
         ('<think>analysis</think>{"classification": "VULNERABLE", "important_lines": [5, 7, 10], "reasoning_summary": "..."}',
          True, [5, 7], 1.0),
         
-        # Correct classification + partial lines -> 0.6
+        # Correct classification + <50% lines -> 0.75
         ('<think>analysis</think>{"classification": "VULNERABLE", "important_lines": [5], "reasoning_summary": "..."}',
-         True, [5, 7, 10], 0.6),
+         True, [5, 7, 10], 0.75),
         
         # Correct classification, no lines needed -> 1.0
         ('<think>analysis</think>{"classification": "NOT_VULNERABLE", "important_lines": [], "reasoning_summary": "..."}',
@@ -307,20 +326,26 @@ if __name__ == "__main__":
         ('<think>analysis</think>{"classification": "NOT_VULNERABLE", "important_lines": [5, 7], "reasoning_summary": "..."}',
          True, [5, 7, 10], 0.3),
         
-        # Wrong classification, no correct lines, but valid JSON -> 0.05
+        # Wrong classification, no correct lines, but valid JSON -> 0.1
         ('<think>analysis</think>{"classification": "VULNERABLE", "important_lines": [1, 2], "reasoning_summary": "..."}',
-         False, [], 0.05),
+         False, [], 0.1),
         
         # No JSON, incomplete thinking -> 0.0
         ('<think>still thinking about VULNERABLE code...',
          True, [5], 0.0),
     ]
     
-    print("Testing reward function:")
+    print("Testing reward function (4-tier + spray guard):")
     for response, is_vuln, gt_lines, expected in test_cases:
         reward = compute_reward(response, is_vuln, gt_lines)
         status = "✓" if abs(reward - expected) < 0.01 else "✗"
         print(f"  {status} Expected {expected}, got {reward}")
+    
+    # Test spray guard: OFF by default (threshold=0)
+    spray_response = '<think>done</think>{"classification": "VULNERABLE", "important_lines": ' + str(list(range(1, 80))) + ', "reasoning_summary": "spraying"}'
+    spray_reward = compute_reward(spray_response, True, [5, 7])
+    spray_status = "✓" if abs(spray_reward - 1.0) < 0.01 else "✗"  # Disabled: should get full line bonus
+    print(f"  {spray_status} Spray guard OFF: predicted 79 lines, expected 1.0 (no guard), got {spray_reward}")
     
     # Test veRL compute_score interface
     print("\nTesting veRL compute_score interface:")

@@ -20,6 +20,7 @@ import json
 import argparse
 import sys
 import os
+import math
 from pathlib import Path
 
 # Add parent directory to path for imports
@@ -215,6 +216,20 @@ def main():
         "--val_file", type=str, default=None,
         help="Path to validation JSONL file (if using existing split)"
     )
+    parser.add_argument(
+        "--max_gt_lines", type=int, default=None,
+        help="Manual threshold: zero-out ground_truth_lines for samples with more GT lines than this value"
+    )
+    parser.add_argument(
+        "--gt_percentile_cap", type=float, default=None,
+        help="Auto-calculate threshold at this percentile (e.g. 99). "
+             "Uses vuln-only percentile when patched GT is empty/disabled, all-samples otherwise."
+    )
+    parser.add_argument(
+        "--gt_percentile_multiplier", type=float, default=1,
+        help="Multiplier on the percentile-based threshold (default: 1). "
+             "Final threshold = ceil(multiplier * percentile_value)"
+    )
     
     args = parser.parse_args()
     
@@ -248,6 +263,79 @@ def main():
         flatten_for_parquet(convert_sample(s, i, merged_index, args.score_patched_lines))
         for i, s in enumerate(samples)
     ]
+    
+    # ================================================================
+    # GT Line Capping: zero-out GT lines for samples exceeding threshold
+    # ================================================================
+    gt_cap_threshold = None
+    
+    if args.max_gt_lines is not None and args.gt_percentile_cap is not None:
+        parser.error("Cannot use both --max_gt_lines and --gt_percentile_cap")
+    
+    if args.gt_percentile_cap is not None:
+        # Auto-calculate threshold based on percentile
+        import numpy as np
+        
+        # Collect GT line counts per class
+        vuln_gt_counts = []
+        patched_gt_counts = []
+        for sample in converted:
+            gt_str = sample['reward_model']['ground_truth']
+            gt = json.loads(gt_str)
+            gt_lines = gt.get('ground_truth_lines', [])
+            if gt.get('is_vulnerable', True):
+                vuln_gt_counts.append(len(gt_lines))
+            else:
+                patched_gt_counts.append(len(gt_lines))
+        
+        # Decide which distribution to use for percentile:
+        # If patched samples have no GT lines (all zeros) or --score_patched_lines is OFF,
+        # use vulnerable-only percentile.
+        # Otherwise use all samples.
+        patched_has_gt = any(c > 0 for c in patched_gt_counts)
+        
+        if not patched_has_gt or not args.score_patched_lines:
+            base_counts = vuln_gt_counts
+            percentile_source = "vulnerable-only"
+        else:
+            base_counts = vuln_gt_counts + patched_gt_counts
+            percentile_source = "all samples"
+        
+        # Filter to non-zero counts for percentile (samples with 0 GT lines are classification-only anyway)
+        non_zero_counts = [c for c in base_counts if c > 0]
+        
+        if non_zero_counts:
+            pctl_value = np.percentile(non_zero_counts, args.gt_percentile_cap)
+            gt_cap_threshold = math.ceil(args.gt_percentile_multiplier * pctl_value)
+            print(f"\nGT Line Capping: AUTO (percentile-based)")
+            print(f"  Source: {percentile_source} ({len(non_zero_counts)} non-zero samples)")
+            print(f"  {args.gt_percentile_cap}th percentile: {pctl_value:.1f}")
+            print(f"  Multiplier: {args.gt_percentile_multiplier}")
+            print(f"  Final threshold: {gt_cap_threshold}")
+        else:
+            print("\nWARNING: No non-zero GT line counts found, skipping GT line capping.")
+    
+    elif args.max_gt_lines is not None:
+        gt_cap_threshold = args.max_gt_lines
+        print(f"\nGT Line Capping: MANUAL (threshold = {gt_cap_threshold})")
+    
+    # Apply capping if threshold is set
+    if gt_cap_threshold is not None:
+        capped_count = 0
+        for sample in converted:
+            gt_str = sample['reward_model']['ground_truth']
+            gt = json.loads(gt_str)
+            gt_lines = gt.get('ground_truth_lines', [])
+            if len(gt_lines) > gt_cap_threshold:
+                capped_count += 1
+                gt['ground_truth_lines'] = []
+                sample['reward_model']['ground_truth'] = json.dumps(gt)
+        print(f"  Zeroed-out GT lines for {capped_count}/{len(converted)} samples "
+              f"({100*capped_count/len(converted):.2f}%) exceeding {gt_cap_threshold} lines")
+        print(f"  (These samples will be classification-only during GRPO)")
+        
+        # Also print the recommended spray threshold for the job script
+        print(f"\n  >>> Recommended GRPO_SPRAY_THRESHOLD env var: {gt_cap_threshold} <<<")
     
     # Split into train/val if needed
     if args.use_existing_split and args.val_file:

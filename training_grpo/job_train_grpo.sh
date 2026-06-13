@@ -58,6 +58,11 @@ export WANDB_API_KEY="${WANDB_API_KEY:-}"
 # Completion logging for debugging (logs all completions during training)
 # export GRPO_COMPLETION_LOG="$OUTPUT_DIR/verl_completions_debug.jsonl"
 
+# Spray guard (optional, disabled by default):
+# Uncomment and set to the threshold printed by prepare_verl_dataset.py to enable.
+# If model predicts more lines than this, only classification reward is given.
+export GRPO_SPRAY_THRESHOLD=60
+
 # VERL output directories
 export VERL_VAL_OUTPUT_DIR="$OUTPUT_DIR/val_output"
 export VERL_TRAIN_ROLLOUT_DIR="$OUTPUT_DIR/train_rollout"
