@@ -635,60 +635,84 @@ The pair-wise metrics measure the model's ability to correctly classify both sam
 \subsection{Initial Experiments: LoRA Fine-Tuning on Qwen3-8B}
 In our first iteration (\vcodeSFT{ver:data_sem2_primevulonly}{ver:teacher_base}{ver:sft_lora}), we tested the viability of reasoning-augmented fine-tuning using Low-Rank Adaptation (LoRA) on a 4-bit quantized Qwen3-8B model, trained strictly on the PrimeVul paired dataset. The fine-tuned model demonstrated a significant relative improvement over its stock baseline on the PrimeVul test set: the F1-score increased from 0.325 to 0.427, and the crucial Pair-wise Correct (P-C) metric rose from 12.78\% to 18.67\% (an approximately 46\% relative increase). This improvement primarily came from a reduction in the model's tendency to falsely label both samples as benign, proving that explicitly teaching the model to reason about vulnerabilities was a promising direction for scaling up to full parameter fine-tuning and reinforcement learning.
 
-\subsection{Combined Dataset Results (970 pairs)}
+\subsection{Combined Dataset Results}
 
-Table~\ref{tab:all_results} presents all evaluated models on the combined test set. For models evaluated at multiple temperatures, we report the temperature yielding the best P-C. Where multiple evaluation runs exist, we report the single best run (averaged metrics across runs are noted in text). The table tracks the full lineage of each model: which dataset version, SFT variant, prompt style, and reward structure were used.
+Table~\ref{tab:combined_results} presents evaluated models on the full combined test set (970 pairs). The table is split into evaluations using the newer "Training" prompt format (which tests the model's ability to output the complex JSON schema) and the older "std\_cls" format (which allows comparison to earlier models). 
 
-Models are identified by a code \texttt{D\#-T\#-S\#-G\#} indicating their Dataset, Teacher Annotation, SFT, and GRPO versions respectively. Click any component of the code to jump to its methodology section.
+For models evaluated across multiple runs, we report the peak metric alongside the average and maximum spread for each metric in the format: \texttt{Best (Avg $\pm$ Spread)}. Temperatures ($T$) are noted directly in the model names. Models are identified by a code \texttt{D\#-T\#-S\#-G\#} indicating their Dataset, Teacher Annotation, SFT, and GRPO versions respectively. Click any component of the code to jump to its methodology section.
 
 \begin{table}[H]
+\noindent
+\hspace*{-2.54cm}
+\begin{minipage}{\paperwidth}
 \centering
-\caption{Combined Dataset Results -- All Model Variants (970 pairs, training prompt format)}
-\label{tab:all_results}
-\resizebox{\textwidth}{!}{%
-\begin{tabular}{lccccccl}
+\caption{Combined Dataset Results -- All Model Variants (970 pairs)}
+\label{tab:combined_results}
+\resizebox{0.97\paperwidth}{!}{%
+\begin{tabular}{lccccccc}
 \toprule
-\textbf{Model} & \textbf{Acc} & \textbf{F1} & \textbf{P-C (\%)} & \textbf{P-V (\%)} & \textbf{P-B (\%)} & \textbf{P-R (\%)} & \textbf{Notes} \\
+\textbf{Model} & \textbf{Acc $\uparrow$} & \textbf{F1 $\uparrow$} & \textbf{P-C (\%) $\uparrow$} & \textbf{P-V (\%) $\downarrow$} & \textbf{P-B (\%) $\downarrow$} & \textbf{P-R (\%) $\downarrow$} & \textbf{Parsable $\uparrow$} \\
+\midrule
+\multicolumn{8}{c}{\textbf{Training Prompt Format}} \\
 \midrule
 \multicolumn{8}{l}{\textit{Baselines}} \\
-Qwen3-4B (Base) & 0.519 & 0.522 & 23.0 & 29.8 & 28.5 & 18.6 & temp 0.4 \\
-Qwen3-32B (Base, teacher) & 0.552 & 0.597 & 23.5 & 42.5 & 20.2 & 13.4 & temp 0.2 \\
+\vcodeBase{ver:data_func}{ver:teacher_hintfree} Qwen3-4B (Base, $T=0.4$) & 52.60 (52.27 $\pm$ 0.74) & 52.92 (52.31 $\pm$ 1.05) & 23.00 (21.83 $\pm$ 2.58) & 29.81 (30.65 $\pm$ 1.35) & 28.54 (30.44 $\pm$ 4.15) & 15.87 (17.04 $\pm$ 2.76) & 1905/1940 \\
+\vcodeBase{ver:data_func}{ver:teacher_hintfree} Qwen3-32B (Base, teacher, $T=0.2$) & 55.35 (55.13 $\pm$ 0.50) & 59.85 (59.50 $\pm$ 0.94) & 24.51 (23.78 $\pm$ 1.19) & 42.06 (42.31 $\pm$ 0.47) & 19.34 (20.17 $\pm$ 1.69) & 13.30 (13.73 $\pm$ 0.79) & 1914/1940 \\
 \midrule
-\multicolumn{8}{l}{\textit{GRPO Run 1 (\vcode{ver:data_func}{ver:teacher_hintfree}{ver:sft_hintfree}{ver:grpo_4tier})}} \\
-\vcodeSFT{ver:data_func}{ver:teacher_hintfree}{ver:sft_hintfree} (SFT trainrun1, hint-free) & 0.504 & 0.415 & 22.3 & 12.9 & 43.7 & 21.2 & temp 0.6, avg 2 runs \\
-\vcodeSFT{ver:data_func}{ver:teacher_hintfree}{ver:sft_hintfree} (SFT trainrun2, hint-free) & 0.542 & 0.464 & 26.7 & 11.7 & 43.3 & 18.3 & temp 0.6 \\
-\textbf{\vcode{ver:data_func}{ver:teacher_hintfree}{ver:sft_hintfree}{ver:grpo_4tier}} (GRPO 4-tier, best) & \textbf{0.561} & \textbf{0.495} & \textbf{28.4} & 13.9 & 40.6 & 17.1 & temp 0.6, best of 3 \\
-\vcode{ver:data_func}{ver:teacher_hintfree}{ver:sft_hintfree}{ver:grpo_4tier} (GRPO 4-tier, avg) & 0.534 & 0.469 & 25.8 & 14.6 & 40.1 & 19.5 & temp 0.6, spread 4.8pp \\
+\multicolumn{8}{l}{\textit{Semester 4 Models (Placeholder for upcoming models)}} \\
+% \vcodeSFT{...} (SFT, $T=0.6$) & 0.00 (0.00 $\pm$ 0.00) & 0.00 (0.00 $\pm$ 0.00) & 00.0 (00.0 $\pm$ 0.0) & 00.0 (00.0 $\pm$ 0.0) & 00.0 (00.0 $\pm$ 0.0) & 00.0 (00.0 $\pm$ 0.0) & 0/0 \\
 \midrule
-\multicolumn{8}{l}{\textit{GRPO Run 2 (\vcode{ver:data_func}{ver:teacher_hintfree}{ver:sft_hints_ablation}{ver:grpo_5tier})}} \\
-\vcodeSFT{ver:data_func}{ver:teacher_hintfree}{ver:sft_hints_ablation} (SFT with hints) & 0.560 & 0.611 & 26.2 & 42.4 & 17.6 & 13.8 & temp 0.4, best of 3 \\
-\vcode{ver:data_func}{ver:teacher_hintfree}{ver:sft_hints_ablation}{ver:grpo_5tier} (GRPO 5-tier, best) & 0.541 & 0.581 & 24.6 & 39.2 & 19.8 & 16.4 & temp 0.6, best of 4 \\
-\vcode{ver:data_func}{ver:teacher_hintfree}{ver:sft_hints_ablation}{ver:grpo_5tier} (GRPO 5-tier, avg) & 0.536 & 0.582 & 22.8 & 39.2 & 19.8 & 16.4 & temp 0.6, spread 3.5pp \\
+\multicolumn{8}{c}{\textbf{std\_cls Prompt Format (Historical Comparison)}} \\
+\midrule
+\multicolumn{8}{l}{\textit{Early Iterations (816 pairs, Semester 2)}} \\
+Qwen3-8B (Base) & 0.528 & 0.325 & 12.8 & 9.1 & 70.0 & 8.1 & N/A \\
+\vcodeSFT{ver:data_sem2_primevulonly}{ver:teacher_sem2}{ver:sft_lora} (LoRA) & 0.528 & 0.427 & 18.7 & 14.7 & 52.6 & 14.0 & N/A \\
+\midrule
+\multicolumn{8}{l}{\textit{Semester 3 Models}} \\
+Qwen3-4B (Base) & 0.523 & 0.266 & 9.5 & 7.1 & 77.7 & 5.6 & N/A \\
+\vcodeSFT{ver:data_commit}{ver:teacher_base}{ver:sft_hints} (SFT, V2 dataset) & 0.550 & 0.539 & 26.5 & 26.0 & 30.8 & 16.7 & N/A \\
 \bottomrule
 \end{tabular}%
 }
+\end{minipage}
 \end{table}
 
-\subsubsection{Historical Results (std\_cls Prompt Format)}
+\subsection{PrimeVul Test Set Results}
 
-For completeness, Table~\ref{tab:historical_stdcls} shows earlier models evaluated with the \texttt{std\_cls} prompt format, which was used in our initial iterations. These results are not directly comparable to the training prompt format above due to the different prompting approach.
+To establish a clear point of comparison against the original PrimeVul benchmarks and our early historical runs, Table~\ref{tab:primevul_results} presents the results exclusively on the PrimeVul test split (407 pairs).
 
 \begin{table}[H]
+\noindent
+\hspace*{-2.54cm}
+\begin{minipage}{\paperwidth}
 \centering
-\caption{Historical Results -- std\_cls Prompt Format (970 pairs)}
-\label{tab:historical_stdcls}
-\begin{tabular}{lcccccc}
+\caption{PrimeVul Test Results -- All Model Variants (407 pairs)}
+\label{tab:primevul_results}
+\resizebox{0.97\paperwidth}{!}{%
+\begin{tabular}{lccccccc}
 \toprule
-\textbf{Model} & \textbf{Acc} & \textbf{F1} & \textbf{P-C (\%) $\uparrow$} & \textbf{P-V (\%)} & \textbf{P-B (\%)} & \textbf{P-R (\%)} \\
+\textbf{Model} & \textbf{Acc $\uparrow$} & \textbf{F1 $\uparrow$} & \textbf{P-C (\%) $\uparrow$} & \textbf{P-V (\%) $\downarrow$} & \textbf{P-B (\%) $\downarrow$} & \textbf{P-R (\%) $\downarrow$} & \textbf{Parsable $\uparrow$} \\
 \midrule
-Qwen3-4B (Base) & 0.523 & 0.266 & 9.5 & 7.1 & 77.7 & 5.6 \\
-\vcodeSFT{ver:data_commit}{ver:teacher_base}{ver:sft_hints} (SFT, V2 dataset) & 0.550 & 0.539 & 26.5 & 26.0 & 30.8 & 16.7 \\
+\multicolumn{8}{c}{\textbf{Training Prompt Format}} \\
 \midrule
-\multicolumn{7}{l}{\textit{Initial Iteration (816 pairs, Qwen3-8B + LoRA)}} \\
-Qwen3-8B (Base) & 0.528 & 0.325 & 12.8 & 9.1 & 70.0 & 8.1 \\
-Qwen3-8B (LoRA) & 0.528 & 0.427 & 18.7 & 14.7 & 52.6 & 14.0 \\
+\multicolumn{8}{l}{\textit{Baselines}} \\
+\vcodeBase{ver:data_func}{ver:teacher_hintfree} Qwen3-4B (Base, $T=0.4$) & 51.14 (50.71 $\pm$ 0.67) & 50.95 (49.60 $\pm$ 2.89) & 22.14 (20.31 $\pm$ 4.31) & 27.80 (28.55 $\pm$ 1.88) & 27.98 (32.66 $\pm$ 9.12) & 16.86 (18.44 $\pm$ 3.33) & 833/848 \\
+\vcodeBase{ver:data_func}{ver:teacher_hintfree} Qwen3-32B (Base, teacher, $T=0.2$) & 54.69 (54.61 $\pm$ 0.18) & 59.01 (58.74 $\pm$ 0.56) & 23.44 (22.76 $\pm$ 1.25) & 39.95 (41.79 $\pm$ 3.00) & 21.00 (21.65 $\pm$ 1.24) & 13.12 (13.77 $\pm$ 1.23) & 841/848 \\
+\midrule
+\multicolumn{8}{l}{\textit{Semester 4 Models (Placeholder for upcoming models)}} \\
+% \vcodeSFT{...} (SFT, $T=0.6$) & 0.00 (0.00 $\pm$ 0.00) & 0.00 (0.00 $\pm$ 0.00) & 00.0 (00.0 $\pm$ 0.0) & 00.0 (00.0 $\pm$ 0.0) & 00.0 (00.0 $\pm$ 0.0) & 00.0 (00.0 $\pm$ 0.0) & 0/0 \\
+\midrule
+\multicolumn{8}{c}{\textbf{std\_cls Prompt Format (Historical Comparison)}} \\
+\midrule
+\multicolumn{8}{l}{\textit{Baselines}} \\
+Qwen3-4B (Base) & 0.503 & 0.189 & 6.2 & 5.4 & 83.0 & 5.4 & N/A \\
+\midrule
+\multicolumn{8}{l}{\textit{Semester 3 Models}} \\
+\vcodeSFT{ver:data_commit}{ver:teacher_base}{ver:sft_hints} (SFT, V2 dataset) & 0.554 & 0.533 & 26.3 & 24.6 & 33.7 & 15.5 & N/A \\
 \bottomrule
-\end{tabular}
+\end{tabular}%
+}
+\end{minipage}
 \end{table}
 
 \subsection{Analysis}

@@ -6,7 +6,7 @@ import argparse
 import collections
 import re
 
-def get_metrics(base_dir, run_type="all", filter_str=None):
+def get_metrics(base_dir, run_type="all", filter_str=None, dataset="combined_training"):
     results = []
     
     # Normalize run_type to a list of strings
@@ -40,7 +40,7 @@ def get_metrics(base_dir, run_type="all", filter_str=None):
         # Look for any metrics folder, including multitemp ones like metrics_temp0p2
         metrics_dirs = glob.glob(os.path.join(d, "metrics*"))
         for m_dir in sorted(metrics_dirs):
-            metrics_path = os.path.join(m_dir, "metrics_combined_training.json")
+            metrics_path = os.path.join(m_dir, f"metrics_{dataset}.json")
             if os.path.exists(metrics_path):
                 try:
                     with open(metrics_path, 'r') as f:
@@ -168,6 +168,7 @@ def print_table(results, sort_by=None, limit=None, reverse=False):
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Compare evaluation metrics across SFT and GRPO models.")
     parser.add_argument("--base_dir", type=str, default="/export/home/acs/stud/t/tudor.farcasanu/SSL_research/evaluation_results", help="Base directory containing results")
+    parser.add_argument("--dataset", type=str, default="combined_training", help="Dataset prefix for metrics file (e.g., combined_training, primevul_test_training, combined_std_cls)")
     parser.add_argument("--type", action="append", help="Type of runs to include (sft, grpo, base, all). Can be specified multiple times or comma-separated (default: all)")
     parser.add_argument("--filter", type=str, default=None, help="String to filter run names by (e.g. 'qwen3')")
     parser.add_argument("--sort", type=str, default=None, help="Metric to sort by (e.g., 'Acc', 'F1', 'P-C', 'Run')")
@@ -187,7 +188,7 @@ if __name__ == "__main__":
     else:
         types = ["all"]
         
-    results = get_metrics(args.base_dir, run_type=types, filter_str=args.filter)
+    results = get_metrics(args.base_dir, run_type=types, filter_str=args.filter, dataset=args.dataset)
     
     if args.aggregate:
         agg_results = aggregate_metrics(results)
