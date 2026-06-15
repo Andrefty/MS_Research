@@ -1,0 +1,871 @@
+\documentclass[12pt,a4paper]{article}
+
+\usepackage[utf8]{inputenc} % pentru suport diacritice
+% \usepackage[romanian]{babel} % setări pentru limba română
+\renewcommand\familydefault{\sfdefault} % sans serif
+
+\usepackage[margin=2.54cm]{geometry} % dimensiuni pagină și margini
+\usepackage{graphicx} % support the \includegraphics command and options
+
+% formatting sections and subsections
+\usepackage{textcase}
+\usepackage[titletoc, title]{appendix}
+\usepackage{titlesec}
+% \titleformat{\chapter}{\large\bfseries\MakeUppercase}{\thechapter}{2ex}{}[\vspace*{-1.5cm}]
+% \titleformat*{\section}{\large\bfseries}
+% \titleformat*{\subsection}{\large\bfseries}
+% \titleformat*{\subsubsection}{\large\bfseries}
+
+% \usepackage{chngcntr}
+% \counterwithout{figure}{chapter} % no chapter number in figure labels
+% \counterwithout{table}{chapter} % no chapter number in table labels
+% \counterwithout{equation}{chapter} % no chapter number in equation labels
+
+\usepackage{booktabs} % for much better looking tables
+\usepackage{url} % Useful for inserting web links nicely
+% \usepackage[bookmarks,unicode,hidelinks]{hyperref}
+\usepackage[
+    colorlinks,
+    linkcolor={black},
+    menucolor={black},
+    citecolor={black},
+    urlcolor={blue}
+]{hyperref}
+\usepackage{array} % for better arrays (eg matrices) in maths
+\usepackage{paralist} % very flexible & customisable lists (eg. enumerate/itemize, etc.)
+\usepackage{verbatim} % adds environment for commenting out blocks of text & for better verbatim
+\usepackage{subfig} % make it possible to include more than one captioned figure/table in a single float
+\usepackage{enumitem}
+\usepackage{float}
+\usepackage{amsmath}
+\setlist{noitemsep}
+
+% packages used for citations
+% \usepackage{apacite} % Commented out to restore standard numbering for 'unsrt'
+% \usepackage{natbib}
+
+\usepackage{xcolor}
+\usepackage{listings}
+% \lstset{language=Python,basicstyle={\bfseries \color{black}},keywordstyle={\bfseries \color{blue}}}
+\titleformat{\paragraph}[hang]
+  {\normalfont\normalsize\bfseries} % Format of the title
+  {\theparagraph}                   % Label (e.g., 1.1.1.1)
+  {1em}                             % Space between label and title
+  {}                                % Code before the title body
+\definecolor{codegreen}{rgb}{0,0.6,0}
+\definecolor{codegray}{rgb}{0.5,0.5,0.5}
+\definecolor{codepurple}{rgb}{0.58,0,0.82}
+\definecolor{backcolour}{rgb}{0.95,0.95,0.92}
+\lstdefinestyle{mystyle}{
+    backgroundcolor=\color{backcolour},   
+    commentstyle=\color{codegreen},
+    keywordstyle=\color{magenta},
+    numberstyle=\tiny\color{codegray},
+    stringstyle=\color{codepurple},
+    basicstyle=\ttfamily\footnotesize,
+    breakatwhitespace=false,         
+    breaklines=true,                 
+    captionpos=b,                    
+    keepspaces=true,                 
+    numbers=left,                    
+    numbersep=5pt,                  
+    showspaces=false,                
+    showstringspaces=false,
+    showtabs=false,                  
+    tabsize=2,
+    frame=single,
+    framerule=0.5pt,
+    rulecolor=\color{black}
+}
+\lstset{style=mystyle}
+
+%%% HEADERS & FOOTERS
+\usepackage{fancyhdr}
+\pagestyle{empty}
+\renewcommand{\headrulewidth}{0pt}
+\renewcommand{\footrulewidth}{0pt}
+\lhead{}\chead{}\rhead{}
+\lfoot{}\cfoot{\thepage}\rfoot{}
+
+\newcommand{\HeaderLineSpace}{-0.25cm}
+
+\newcommand{\UniTextEN}{National University of Science and Technology\\ POLITEHNICA Bucharest\\
+Faculty of Automatic Control and Computers\\
+Computer Science and Engineering Department\\}
+\newcommand{\DiplomaEN}{DIPLOMA PROJECT}
+\newcommand{\AdvisorEN}{Thesis advisors:}
+\newcommand{\BucEN}{BUCHAREST}
+
+\newcommand{\frontPage}[6]{
+\begin{titlepage}
+\begin{center}
+{\Large #1}  % header (university, faculty, department)
+\vspace{50pt}
+% \begin{tabular}{ccc}
+% \includegraphics[height=3cm]{pics/UNST Poli.png} & 
+% \includegraphics[height=3cm]{pics/A&C.png} & 
+% \includegraphics[height=3cm]{pics/UPB NLP.png}
+% \end{tabular}
+\begin{tabular}{cc}
+\includegraphics[height=3cm]{pics/UNST Poli.png} & 
+\includegraphics[height=3cm]{pics/A&C.png}
+\end{tabular}
+
+\vspace{105pt}
+{\Huge #2}\\                             % diploma project text
+\vspace{40pt}
+{\Large #3}\\ \vspace{0pt}               % project title
+\vspace{40pt}
+{\LARGE \Name}\\                         % student name
+\end{center}
+\vspace{60pt}
+\begin{tabular*}{\textwidth}{@{\extracolsep{\fill}}p{6cm}r}
+&{\large\textbf{#5}}\vspace{10pt}\\      % scientific advisor
+&{\large \AdvisorA}\\                    % advisor name A
+&{\large \AdvisorB}                      % advisor name B
+\end{tabular*}
+\vspace{20pt}
+\begin{center}
+{\large\textbf{#6}}\\
+\vspace{0pt}
+{\normalsize \Year}
+\end{center}
+\end{titlepage}
+}
+
+\newcommand{\frontPageEN}{\frontPage{\UniTextEN}{\DiplomaEN}{\ProjectTitleEN}{\ProjectSubtitleEN}{\AdvisorEN}{\BucEN}}
+
+\linespread{1.15}
+\setlength\parindent{0pt}
+\setlength\parskip{.28cm}
+
+%% Abstract macro
+\newcommand{\AbstractPage}{
+\begin{titlepage}
+
+\thispagestyle{fancy}\setcounter{page}{5}
+\clearpage\phantomsection\addcontentsline{toc}{section}{Abstract}
+
+\textbf{\large ABSTRACT}\par
+\AbstractEN \vfill
+\textbf{\large REZUMAT}\par
+\AbstractRO\par\vfill
+\end{titlepage}
+}
+
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+%%
+%%          End of template definitions
+%%
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
+\newcommand{\ProjectTitleEN}{Awesome Title}
+\newcommand{\Name}{Your name}
+\newcommand{\AdvisorA}{Prof./Conf./S.l./As. dr./drd. ing. X}
+\newcommand{\AdvisorB}{Prof./Conf./S.l./As. dr./drd. ing. Y}
+\newcommand{\Year}{202x}
+
+
+% --- Version Tracking Macros ---
+\makeatletter
+\newcounter{DataVer}
+\newcommand{\dataversion}[2]{%
+  \stepcounter{DataVer}%
+  \subsection{Dataset Version \theDataVer: #1}%
+  \protected@edef\@currentlabel{\theDataVer}\label{#2}%
+}
+
+\newcounter{TeacherVer}
+\newcommand{\teacherversion}[2]{%
+  \stepcounter{TeacherVer}%
+  \subsection{Teacher Version \theTeacherVer: #1}%
+  \protected@edef\@currentlabel{\theTeacherVer}\label{#2}%
+}
+
+\newcounter{SFTVer}
+\newcommand{\sftversion}[2]{%
+  \stepcounter{SFTVer}%
+  \subsubsection{SFT Version \theSFTVer: #1}%
+  \protected@edef\@currentlabel{\theSFTVer}\label{#2}%
+}
+
+\newcounter{GRPOVer}
+\newcommand{\grpoversion}[2]{%
+  \stepcounter{GRPOVer}%
+  \paragraph{GRPO Version \theGRPOVer: #1}%
+  \protected@edef\@currentlabel{\theGRPOVer}\label{#2}%
+}
+\makeatother
+
+% --- Table Linkage Macros ---
+\newcommand{\vcode}[4]{\hyperref[#1]{D\ref*{#1}}-\hyperref[#2]{T\ref*{#2}}-\hyperref[#3]{S\ref*{#3}}-\hyperref[#4]{G\ref*{#4}}}
+\newcommand{\vcodeSFT}[3]{\hyperref[#1]{D\ref*{#1}}-\hyperref[#2]{T\ref*{#2}}-\hyperref[#3]{S\ref*{#3}}}
+\newcommand{\vcodeBase}[2]{\hyperref[#1]{D\ref*{#1}}-\hyperref[#2]{T\ref*{#2}}-Base}
+
+% Setări document
+\title{Proiect de diplomă}
+\author{\Name}
+\date{\Year}
+
+%%
+%%   Câmpurile aferente rezumatului
+%%
+\newcommand{\AbstractEN}{
+% Large Language Models (LLMs) show promise for automated vulnerability detection but struggle to distinguish between vulnerable code and its patched counterpart. This research advances LLM-based vulnerability detection through two approaches: dataset consolidation and reinforcement learning optimization. We merge three vulnerability datasets (PrimeVul, SVEN, SecVulEval) into approximately 6,600 unique pairs, then use a 32B teacher model to generate reasoning-augmented training data. Supervised fine-tuning of Qwen3-4B on this dataset achieves a 35\% relative improvement in pair-wise classification accuracy (P-C from 19.4\% to 26.2\%) on the PrimeVul benchmark, continuing improvements from our prior LoRA-based approach. We also explore Group Relative Policy Optimization (GRPO) for further refinement, though infrastructure limitations restricted training to a small subset (64 samples). The results show that more diverse, reasoning-focused training data improves vulnerability discrimination, with the fine-tuned model showing reduced benign bias.
+}
+
+\newcommand{\AbstractRO}{Translation to be made at the end
+
+\vspace{3\baselineskip}
+\textbf{Keywords}: max 5, e.g., Language Models, Natural Language Processing
+}
+
+
+\begin{document}
+\pagenumbering{roman}
+\frontPageEN
+\begingroup
+\linespread{1}
+\tableofcontents
+\endgroup
+
+% Keep the list of figures and the list of tables on the same page.
+\pagestyle{fancy}
+\listoffigures\addcontentsline{toc}{section}{List of figures}
+\begingroup
+\let\clearpage\relax
+\listoftables\addcontentsline{toc}{section}{List of tables}
+\endgroup
+
+% Include the abstract page. See this definition if page numbers are wrong.
+\AbstractPage
+
+% poate fi comentata sau stearsa
+% \ThanksPage
+
+% Start the normal page numbering.
+\pagenumbering{arabic}
+
+% Textul licentei incepe de aici
+\section{Introduction}
+The escalating complexity of modern software systems has been paralleled by a surge in security vulnerabilities, making automated detection a critical field of research. While traditional static and dynamic analysis tools have been foundational, they often struggle with high false positive rates or require extensive manual configuration. The advent of Large Language Models (LLMs) has introduced a new paradigm, demonstrating a remarkable ability to understand and generate code, which has naturally been extended to the task of vulnerability detection \cite{vulnllmeval, if_llms_would_just_look}.
+
+Despite their perceived potential, more recent works have shown that LLMs often fail to distinguish between vulnerable code and its subtly patched, non-vulnerable counterpart. This limitation, highlighted in works like PrimeVul \cite{primevul}, suggests that models may be overfitting to superficial textual features rather than grasping the deep, underlying semantic causes of a vulnerability. When presented with a function and its nearly identical fixed version, many state-of-the-art models struggle to label both correctly, raising serious concerns about their reliability for practical security applications.
+
+Inspired by the knowledge-level enhancement frameworks proposed by works like Vul-RAG \cite{vul-rag}, we hypothesized that an LLM's ability to differentiate vulnerable from benign code can be significantly improved by fine-tuning it on a dataset that explicitly articulates the reasoning behind a vulnerability's existence and its corresponding fix. This research approaches this challenge through a multi-stage methodology: establishing baseline performance of modern open-source LLMs on the PrimeVul benchmark; generating a reasoning-augmented fine-tuning dataset by prompting a more powerful teacher model to articulate its analysis; scaling this approach across multiple vulnerability datasets while minimizing redundancy across complementary data sources; and applying reinforcement learning with targeted reward signals to further optimize the model's discriminative capabilities. The expected outcome is a vulnerability detection system that achieves superior discrimination between vulnerable and patched code, scales effectively to larger and more diverse datasets, and generalizes better to \iffalse novel \fi vulnerability patterns.
+
+\section{Related Work}
+
+\subsection{The Challenge of Differentiating Vulnerable and Patched Code}
+
+Recent works highlight the difficulty LLMs face in distinguishing between vulnerable code and its minimally altered, patched version. The PrimeVul paper \cite{primevul} highlighted this issue by introducing a benchmark composed of paired vulnerable and fixed code functions and proposed a set of pair-wise evaluation metrics (P-C, P-V, P-B, P-R) to specifically measure this discriminative capability. Their findings revealed that even powerful models such as GPT-4 struggled to correctly classify both samples in a vulnerable/benign pair, with P-C scores indicating significant room for improvement. This observation suggests that LLMs may be overfitting to superficial textual features rather than grasping the deep, underlying semantic causes of vulnerabilities.
+
+\subsection{Real-World Vulnerability Detection at Scale}
+
+The CyberGym benchmark \cite{cybergym} demonstrates the complexity of real-world vulnerability detection through a large-scale evaluation framework featuring 1,507 vulnerabilities across 188 open-source projects discovered by OSS-Fuzz. Rather than simple classification tasks, CyberGym requires AI agents to generate proof-of-concept tests that reproduce vulnerabilities given only vulnerability descriptions and source code repositories containing thousands of files and millions of lines of code. The benchmark reveals that even the top-performing AI agent combinations (OpenHands with Claude-3.7-Sonnet) achieve only 11.9\% success rate on the primary task, underscoring the substantial gap between current capabilities and practical vulnerability analysis. Beyond benchmarking, CyberGym demonstrates tangible real-world impact: agents discovered 35 zero-day vulnerabilities and identified 17 historically incomplete patches in production software.
+
+% \subsection{Repository-Level and Interprocedural Context}
+
+Building on the challenge of repository-scale analysis, Just-In-Time (JIT) vulnerability detection has emerged as another problem because vulnerabilities often manifest through multi-hop function calls across repositories rather than within isolated functions. The JitVul benchmark \cite{jitvul} addresses this limitation by linking each vulnerable function to its vulnerability-introducing and fixing commits across 879 CVEs spanning 91 vulnerability types. JitVul demonstrates that LLM-based agents with reasoning capabilities outperform isolated function-level analysis, with ReAct agents leveraging thought-action-observation patterns achieving superior discrimination between vulnerable and benign code compared to standard LLM prompting.
+
+\subsection{Explainability and Interpretability in Vulnerability Detection}
+
+Understanding why models make vulnerability predictions is increasingly important for both security practitioners and model developers. Recent work on Explainable Vulnerability Detection \cite{explainable_vuln} using edge-aware graph attention networks demonstrates how to compute relevance scores for both nodes and edges in Code Property Graphs by leveraging attention weights and input gradients, then mapping these back to source-level constructs for human interpretation. This approach enables security teams to understand which specific code elements the model identified as problematic, bridging the gap between black-box model predictions and actionable insights.
+
+\subsection{Foundational Deep Learning and Graph-Based Methods}
+
+While LLM-based approaches represent the current frontier, foundational deep learning methods remain important references. Graph Neural Networks operating on Abstract Syntax Trees and Control Flow Graphs \cite{devign} have demonstrated effective vulnerability detection by capturing semantic program structure. Deep learning systems like VulDeePecker \cite{VulDeePecker_paper} and SySeVR \cite{SySeVR_paper} pioneered neural approaches to vulnerability identification. More recent dataflow-inspired approaches \cite{deepdfa} show that combining traditional program analysis insights with deep learning continues to yield improvements. These foundational techniques inform our understanding of what semantic patterns are critical for vulnerability detection and suggest that enhancing LLMs with structured reasoning and rich training signals is a promising direction.
+
+\section{Data Preparation and Merging}
+
+The dataset preparation evolved across a couple of major versions to maximize data diversity while ensuring accurate pair-wise evaluation. The pipeline combines three primary data sources:
+
+\textbf{PrimeVul} serves as the primary foundation, providing paired vulnerable and patched code functions from CVEs. The dataset includes commit-level metadata linking each vulnerability to its fix, and vulnerability descriptions.
+
+\textbf{SVEN} contributes 1,606 manually-verified functions (803 vulnerable, 803 non-vulnerable) covering 9 CWE types with claimed 94\% label accuracy. SVEN's distinguishing feature is its detailed metadata including the specific lines that were changed between vulnerable and patched versions as well as character level changes.
+
+\textbf{SecVulEval} adds additional CVE and CWE linked samples, with line level change metadata.
+
+\dataversion{Version 1: PrimeVul Only}{ver:data_sem2_primevulonly}
+In our initial experiments, we relied exclusively on the paired dataset provided by the PrimeVul benchmark \cite{primevul}. This dataset consists of paired vulnerable functions and their corresponding fixed, non-vulnerable versions, providing 1,632 entries (816 pairs), which were used to establish baseline performance and conduct early dataset generation experiments. However, relying solely on the stock PrimeVul dataset limited the diversity and metadata richness of our training data. This limitation prompted the integration of additional datasets and deduplication strategies in subsequent versions to support full-scale fine-tuning and reinforcement learning.
+
+\dataversion{Version 2: Commit-Level Deduplication}{ver:data_commit}
+The initial merging process followed a priority-based deduplication strategy using \texttt{commit\_id} as the primary key. When samples from multiple sources shared the same commit, SVEN data was prioritized due to its manual verification, followed by merging CVE descriptions from any available source. The merging script preserves all \texttt{line\_changes} information, which is critical for training the model to identify specific vulnerable lines.
+
+\begin{lstlisting}[caption={Example of a merged dataset entry (structure)}]
+{
+  "source": "primevul",
+  "commit_id": "239c4f7...",
+  "project": "wget",
+  "cve": "CVE-2015-7665",
+  "cve_desc": "Tails before 1.7 includes the wget program but 
+     does not prevent automatic fallback from passive FTP...",
+  "vuln_func": "void function(...) { ... }",
+  "patched_func": "void function(...) { ... }",
+  "deleted_lines": [
+    {"line_no": 645, "text": "err = ftp_do_port (csock, ...);"}
+  ],
+  "added_lines": []
+}
+\end{lstlisting}
+
+After commit-level deduplication and filtering out samples where the vulnerable function was identical to the patched function, this consolidated dataset contained approximately 6,600 unique samples.
+
+\dataversion{Version 3: Function-Level Deduplication}{ver:data_func}
+While commit-level deduplication prevented identical overlaps, it introduced a significant flaw: commits that patched multiple different functions were collapsed into a single pair, dropping thousands of valid vulnerability pairs.
+
+To address this, we implemented a function-level deduplication pipeline. The process groups samples by \texttt{(commit\_id, func\_name)} and applies a three-tier conflict resolution strategy. First, each function's code is normalized (whitespace stripped, empty lines removed, lowercased) and assigned a SHA-256 hash. Entries within the same group that share an identical hash are true duplicates; the best entry is selected by source priority (SVEN $>$ SecVulEval $>$ PrimeVul) and metadata from all losers is merged into the winner (fill-only semantics: existing fields are never overwritten).
+
+When entries in the same group have different hashes, a pairwise resolution determines whether they represent genuine distinct functions or merely crawling artifacts from different sources. For each pair, we compute a normalized diff to determine how many lines were added and removed, a \texttt{SequenceMatcher} similarity score, and whether the functions originate from different files. If one function wholly contains the other (i.e., no lines were removed, only added) or the pair exhibits high similarity ($>0.7$) or a high added-lines ratio ($\geq 2$), and both entries come from the same file path, they are collapsed: the version with more added lines is kept, with tie-breaking by CVE description availability, commit message availability, and finally source priority. If the pair has low similarity \emph{and} a low added-lines ratio, or if the entries come from different files, they are treated as genuinely different functions and both are preserved. After resolution, all surviving variants within a group undergo cross-enrichment: metadata gaps (CVE, CWE, descriptions) are filled from siblings when their CVE identifiers are compatible (matching or subset).
+
+To stabilize downstream pairwise evaluation, we also introduced deterministic \texttt{pair\_id}s by appending the \texttt{vuln\_hash} to each sample's identifier, ensuring that pairs remain uniquely trackable across evaluation runs.
+
+The following schematic summarizes the conflict resolution logic:
+
+\begin{lstlisting}[caption={Function-level deduplication decision tree}]
+For each (commit_id, func_name) group:
+|
++-- All entries have SAME vuln_hash?
+|   YES -> TRUE DUPLICATE
+|   -> pick_best(): keep ONE by priority (SVEN > SE > PV)
+|   -> merge_metadata(): fill winner's gaps from all losers
+|
++-- Entries have DIFFERENT vuln_hash?
+    |
+    +-- One wholly contains the other? (removed == 0)
+    |   |
+    |   +-- diff_file = True? -> GENUINELY DIFFERENT (keep both)
+    |   |
+    |   +-- diff_file = False? -> COLLAPSE: keep bigger
+    |       -> merge_metadata(): fill winner's gaps from loser
+    |
+    +-- High similarity (> 0.7) OR high added_ratio (>= 2)?
+    |   |
+    |   +-- diff_file = True? -> GENUINELY DIFFERENT (keep both)
+    |   |
+    |   +-- diff_file = False? -> COLLAPSE:
+    |       keep version with more ADDED LINES
+    |       Tie-break 1: prefer entry with cve_desc
+    |       Tie-break 2: prefer entry with commit_message
+    |       Tie-break 3: priority (SVEN > SE > PV)
+    |       -> merge_metadata(): fill winner's gaps from loser
+    |
+    +-- Low similarity (<= 0.7) AND low added_ratio (< 2)?
+        -> Likely GENUINELY DIFFERENT functions
+        -> KEEP BOTH
+        -> Cross-enrich metadata between siblings
+           (fill gaps when CVEs are compatible)
+\end{lstlisting}
+
+As part of the dataset refinement, we also implemented several data quality measures. Ground truth line numbers from SecVulEval were found to contain out-of-bounds indices and misindexed lines, we corrected these by first attempting text-based search to relocate the correct line, falling back to a difflib approach computing the exact line changes between the vulnerable and patched functions directly. Samples where the vulnerable function was effectively identical to its patched counterpart (exact match or only trailing whitespace differences) were filtered out, as they represent non-fixes. Additionally, uninformative CWE classifications such as ``NVD-CWE-noinfo'' and ``NVD-CWE-Other'' were excluded from the metadata to avoid noise in downstream analysis.
+
+This function-level deduplication and data quality pipeline successfully recovered previously discarded data, expanding the final consolidated dataset to 12,912 unique deduplicated functions.
+
+\begin{lstlisting}[caption={Example of the function-level deduplicated dataset entry structure}]
+{
+  "source": "primevul",
+  "pair_id": "primevul_wget_239c4f7_ftp_do_port_bf051808...",
+  "commit_id": "239c4f7...",
+  "project": "wget",
+  "project_url": "https://github.com/bminor/wget",
+  "func_name": "ftp_do_port",
+  "filepath": "src/ftp.c",
+  "vuln_hash": "bf05180879eea857f1998742f452dfb7e7fa1fbc10...",
+  "vuln_func": "void ftp_do_port(...) { ... }",
+  "patched_func": "void ftp_do_port(...) { ... }",
+  "cve": ["CVE-2015-7665"],
+  "cve_desc": "Tails before 1.7 includes the wget program but 
+     does not prevent automatic fallback from passive FTP...",
+  "cwe": ["CWE-200"],
+  "commit_message": "Fix FTP fallback information disclosure...",
+  "deleted_lines": [
+    {
+      "line_no": 645, 
+      "char_start": 1032, 
+      "char_end": 1063, 
+      "text": "err = ftp_do_port (csock, ...);"
+    }
+  ],
+  "added_lines": []
+}
+\end{lstlisting}
+
+\section{Teacher Model Annotation for Training Data Generation} \label{sec:teacher_model_annotation}
+
+To create training data for the reinforcement learning phase, we implemented a teacher model annotation pipeline using Qwen3-32B. We generated reasoning traces for each vulnerability sample, following structured prompt formats designed to elicit both classification and localization information.
+
+\teacherversion{Version 0 (Semester 2): Plain text prompt}{ver:teacher_sem2}
+In our initial experiments, the prompting strategy was designed to elicit a simple, structured classification response without relying on a formal JSON schema. Each prompt contained the full, numbered code snippet, the associated CVE description if available, and ground-truth hints explicitly stating whether the snippet was vulnerable and pointing to the modified lines, and finally, a direct instruction forced the model to perform its reasoning internally before providing a parseable answer: \texttt{"Please indicate your analysis result *only* with one of the following exact statements...: '(1) YES:...' or '(2) NO:...'"}.
+
+\begin{lstlisting}[language=Python, caption={Example teacher annotation prompt from Semester 2 (using the wget example)}]
+Please analyze the following code snippet:
+```
+...
+774:           if (!opt.server_response)
+775:             logputs (LOG_VERBOSE, "==> RETR ... ");
+...
+798:       err = ftp_retr (csock, u->file);
+...
+800:       switch (err)
+801:         {
+802:         case FTPRERR:
+...
+904:      }
+```
+
+The associated CVE description is: Tails before 1.7 includes the wget...
+Hint: According to the ground truth, this code snippet is considered vulnerable.
+The changed lines that might be related to the vulnerability are: Lines: 11, 642, 645, 646, 648.
+
+Please indicate your analysis result with one of the options: 
+(1) YES: A security vulnerability detected.
+(2) NO: No security vulnerability. 
+
+Only reply with one of the options above. Do not include any further information.
+\end{lstlisting}
+
+\teacherversion{Version 1: JSON schema and additional hint data}{ver:teacher_base}
+\begin{lstlisting}[language=Python, caption={Example system prompt (truncated) used for teacher model annotation}]
+You are an expert code security analyst. Analyze the provided 
+code and determine if it contains any security vulnerabilities.
+
+Code:
+...
+774:           if (!opt.server_response)
+775:             logputs (LOG_VERBOSE, "==> RETR ... ");
+...
+798:       err = ftp_retr (csock, u->file);
+...
+800:       switch (err)
+801:         {
+802:         case FTPRERR:
+...
+904:      }
+
+Context:
+- CVE: CVE-2015-7665
+- Description: Tails before 1.7 includes the wget program but 
+  does not prevent automatic fallback from passive FTP to active 
+  FTP, which allows remote FTP servers to discover the Tor client 
+  IP address.
+
+Hint: This code contains a security vulnerability.
+The changed lines that might be related to the vulnerability are: 
+Lines: 11, 642, 645, 646, 648.
+
+Task: After your reasoning, provide your analysis in JSON format: 
+{"classification": "VULNERABLE" or "NOT_VULNERABLE", 
+ "vulnerable_lines": [...], "reasoning_summary": "..."}
+\end{lstlisting}
+
+Each sample continues to be formatted with line numbers to facilitate vulnerable line identification, but this time the prompt includes additional contextual hints derived from the merged dataset: CVE identifiers, CWE classifications, CVE descriptions (where available), and the specific lines that were changed. For vulnerable samples, the deleted lines between vulnerable and patched versions serve as ground truth for the \texttt{vulnerable\_lines} field (later renamed to \texttt{important\_lines} to unify the schema across vulnerable and patched samples).
+
+The annotation process prioritizes samples with rich metadata (CVE descriptions). The pipeline uses SGLang \cite{sglang} for inference with Qwen3-32B, with concurrent requests.
+
+\teacherversion{Version 2: Prompt and Schema Refinements}{ver:teacher_hintfree}
+As the dataset and methodology evolved, we made several refinements to the annotation pipeline. While the teacher model annotation continues to use the full hint-rich prompt to generate high-quality reasoning traces, the training datasets (both SFT and GRPO) now reconstruct hint-free prompts from the merged dataset. During training, the student model receives only the raw code with line numbers and the JSON output instruction, without any CVE context or vulnerability hints, while still learning from the teacher's response that was generated with full context. This forces the model to learn to identify vulnerabilities from the code itself rather than relying on metadata cues.
+
+For the same sample shown above, the Version 2 teacher annotation prompt would appear as follows, including the added commit message and updated JSON schema:
+
+\begin{lstlisting}[language=Python, caption={Example Version 2 teacher annotation prompt (same sample as Version 1)}]
+You are an expert code security analyst. Analyze the provided 
+code and determine if it contains any security vulnerabilities.
+
+Code:
+...
+774:           if (!opt.server_response)
+775:             logputs (LOG_VERBOSE, "==> RETR ... ");
+...
+798:       err = ftp_retr (csock, u->file);
+...
+904:      }
+
+Context:
+- CVE: CVE-2015-7665
+- Description: Tails before 1.7 includes the wget program but 
+  does not prevent automatic fallback from passive FTP to active 
+  FTP, which allows remote FTP servers to discover the Tor client 
+  IP address.
+- Commit Message: Fix passive FTP fallback vulnerability.
+
+Hint: This code contains a security vulnerability.
+The changed lines that might be related to the vulnerability are: 
+Lines: 11, 642, 645, 646, 648.
+
+Task: After your reasoning, provide your analysis in JSON format: 
+{"classification": "VULNERABLE" or "NOT_VULNERABLE", 
+ "important_lines": [...], "reasoning_summary": "..."}
+\end{lstlisting}
+
+The prompt construction was also updated to dynamically include commit messages when token budget allows, with intelligent truncation: if a sample has a CVE description, the commit message is dropped when it would push the prompt below a minimum output size threshold; if no CVE description is available, the commit message is token-level truncated to fit the remaining space.
+
+Additionally, the output field \texttt{vulnerable\_lines} was renamed to \texttt{important\_lines} to unify the schema across vulnerable and patched samples, enabling the GRPO reward function to evaluate line localization for patched (fixed) code using \texttt{added\_lines} as ground truth. We also experimented with keeping hints and vulnerability context turned on during the SFT process (while GRPO always used hint-free prompts), as discussed further in the training experiments below.
+
+\teacherversion{Version 3: Back to hints for SFT, same as \hyperref[ver:teacher_hintfree]{T\ref*{ver:teacher_hintfree}} otherwise}{ver:teacher_withhints}
+
+\teacherversion{Version 4: Running experiment, same as \hyperref[ver:teacher_withhints]{T\ref*{ver:teacher_withhints}}, no commit messages when CVE description is present}{ver:teacher_withhints_drop_commit_msg}
+
+\section{Training}
+
+
+\subsection{Phase 1: Supervised Fine-Tuning (SFT)}
+In phase 1 we trained Qwen3-4B, and initially Qwen3-8B, to mimic the teacher model's responses. This phase uses the generated dataset where each sample contains the formatted prompt (in the various ways also described in \ref{sec:teacher_model_annotation}) and the teacher's response (including full reasoning trace in ``thinking mode''). The model learns to produce structured responses, at first formatted just like the ``\texttt{std\_cls}'' prompt format from PrimeVul\cite{primevul}, then later on JSON outputs with classification, vulnerable line identification, and reasoning summaries.
+
+\sftversion{Version 1: LoRA Fine-Tuning on Qwen3-8B (Semester 2)}{ver:sft_lora}
+Using the initial PrimeVul-only dataset annotated with the basic classification prompt (\hyperref[ver:teacher_sem2]{T\ref*{ver:teacher_sem2}}), we performed an initial round of Low-Rank Adaptation (LoRA) fine-tuning on a 4-bit quantized Qwen3-8B model using Unsloth \cite{unsloth}, in order to test whether teaching a model the explicit reasoning behind vulnerabilities could improve its discriminative capabilities before scaling up to full parameter fine-tuning.
+
+To make training computationally feasible on a single 80GB GPU, we used \textbf{Low-Rank Adaptation (LoRA)}, a parameter-efficient fine-tuning (PEFT) technique that freezes the pre-trained model weights and injects trainable rank-decomposition matrices into the layers of the Transformer architecture, significantly reducing the number of trainable parameters. We applied LoRA adapters across all attention projections (\texttt{q\_proj, k\_proj, v\_proj, o\_proj}) and feed-forward layers (\texttt{gate\_proj, up\_proj, down\_proj}). We utilized an expressive configuration with a LoRA Rank ($r$) of 128, which determines the rank of the decomposition matrices ($W_{\Delta} = B \cdot A$). While a higher rank increases the parameter count, it also allows for more expressive power in the adapter, so we chose a somewhat higher value to ensure the adapter had sufficient expressive power for significant adaptation. This was paired with a LoRA Alpha ($\alpha$) of 128, a scaling factor for the LoRA output that controls the magnitude of the adaptation relative to the original weights, which is typically set equal to the rank. Additional training hyperparameters included a learning rate of $2 \times 10^{-4}$ with a linear scheduler, an effective batch size of 32 (4 per device $\times$ 8 gradient accumulation steps), and a training duration of one full epoch. As shown in Figure \ref{fig:loss}, the training loss exhibited a stable decrease, confirming effective learning from the reasoning-augmented dataset (\hyperref[ver:teacher_sem2]{T\ref*{ver:teacher_sem2}}).
+
+\begin{figure}[H]
+    \centering
+    \includegraphics[width=0.66\textwidth]{training_loss.png}
+    \caption{Training Loss over Steps}
+    \label{fig:loss}
+\end{figure}
+
+\begin{figure}[H]
+    \centering
+    \includegraphics[width=0.66\textwidth]{learning_rate.png}
+    \caption{Learning Rate Schedule}
+    \label{fig:lr}
+\end{figure}
+
+\subsubsection*{Common Qwen3-4B SFT Configuration (Versions 2+)}
+Building upon the success of the initial LoRA experiment, all subsequent SFT iterations transitioned to full parameter fine-tuning of Qwen3-4B. This model was selected as the primary training target because it possesses native ``thinking mode'' capabilities for detailed reasoning traces, yet fits within the 3$\times$80GB GPU memory constraint for full fine-tuning using DeepSpeed ZeRO-3 \cite{deepspeed}. All Qwen3-4B SFT runs were executed on the UPB cluster (fep) utilizing 3$\times$80GB H100 GPUs, 64 CPU cores, and 300GB RAM, with the following standard hyperparameters:
+\begin{itemize}
+  \item Learning rate: $2 \times 10^{-5}$ with 3\% warmup
+  \item Batch size: 1 per device $\times$ 16 gradient accumulation steps
+  \item Max sequence length: 32,768 tokens
+  \item 1 epoch, gradient checkpointing enabled
+\end{itemize}
+
+\sftversion{Version 2 (semester 3, just for reference): SFT with Hints}{ver:sft_hints}
+
+\begin{figure}[H]
+\noindent
+\hspace*{-2.5cm}
+\begin{minipage}{\paperwidth}
+\centering
+\includegraphics[width=\paperwidth]{SFT_Qwen3_4B.png}
+\caption{SFT Phase 1 training metrics: training loss, learning rate, and gradient norm.}
+\label{fig:sft_training_metrics}
+\end{minipage}
+\end{figure}
+
+\sftversion{Version 3 (best semester 4, just for reference): Hint-Free SFT Training Prompts}{ver:sft_hintfree}
+
+While the teacher model annotation uses the full hint-rich prompt to generate high-quality reasoning traces, in this version for the SFT training dataset \iffalse (both SFT and GRPO) \fi we reconstruct hint-free prompts from the merged dataset so that the student model receives only the raw code with line numbers and the JSON output instruction, without any CVE context or vulnerability hints, in hope of making the SFT model more used to the evaluation prompts, while still learning from the teacher's response that was generated with full context. This change compared to the previous version \ref{ver:sft_hints} aims to make the SFT model more robust and improve its ability to identify vulnerabilities from the code itself rather than relying on metadata cues.
+
+\sftversion{Version 4 (current semester 4, just for reference): SFT with Hints Re-Introduced (ablation)}{ver:sft_hints_ablation}
+\sftversion{Version 5 (latest semester 4, just for reference): SFT with Hints with \hyperref[ver:teacher_withhints_drop_commit_msg]{T\ref*{ver:teacher_withhints_drop_commit_msg}}}{ver:sft_hints_drop_commit_msg}
+
+\subsection{Phase 2: Group Relative Policy Optimization (GRPO)}
+Phase 2 refines the SFT checkpoint using reinforcement learning with a programmatic reward function. GRPO, introduced in the DeepSeekMath paper \cite{deepseekmath}, is a variant of Proximal Policy Optimization (PPO) specifically designed for language model training.
+
+The key innovation of GRPO is eliminating the need for a separate value network (critic), reducing memory overhead by 40--60\%. Instead of learning a value function, GRPO estimates the baseline for advantage calculation directly from the rewards of multiple outputs generated for the same prompt. For each prompt $q$, the model generates $G$ candidate responses $\{o_1, ..., o_G\}$, each receiving a reward $r_i$. The advantage for each response is computed as:
+\begin{equation}
+A_i = \frac{r_i - \text{mean}(\{r_1, ..., r_G\})}{\text{std}(\{r_1, ..., r_G\})}
+\end{equation}
+This group-relative advantage indicates whether a response is better ($A_i > 0$) or worse ($A_i < 0$) than the group average. The policy is then updated using the standard PPO clipped objective with these advantages \cite{deepseekmath, trl}.
+
+\subsubsection{Reward Function}
+The reward function implements a discrete structure based on classification accuracy and vulnerable line localization. Over the course of our experiments, we evaluated two main configurations:
+
+\grpoversion{Version 1: 4-Tier Reward Structure}{ver:grpo_4tier}
+\begin{itemize}
+\item \textbf{Full reward (1.0):} Correct classification and $\geq$50\% of vulnerable lines correctly identified
+\item \textbf{Partial reward (0.6):} Correct classification but insufficient line localization ($<$50\%)
+\item \textbf{Localization-only reward (0.3):} Incorrect classification but some correct vulnerable lines identified
+\item \textbf{Format reward (0.05):} Valid JSON output but wrong classification and no correct lines
+\item \textbf{Zero reward (0.0):} Invalid response format (malformed JSON, incomplete output)
+\end{itemize}
+
+\grpoversion{Version 2: 5-Tier Reward Structure}{ver:grpo_5tier}
+To reduce the number of unparsable responses (where the model failed to output valid JSON) and reward high-precision localization, we later tested an expanded 5-tier system:
+\begin{itemize}
+\item \textbf{High-Precision reward (1.25):} Correct classification and $\geq$75\% of vulnerable lines identified
+\item \textbf{Full reward (1.0):} Correct classification and $\geq$50\% of vulnerable lines identified
+\item \textbf{Partial reward (0.75):} Correct classification
+\item \textbf{Localization-only reward (0.4):} Incorrect classification but some correct lines identified
+\item \textbf{Format reward (0.15):} Valid JSON output
+\item \textbf{Zero reward (0.0):} Invalid response format (malformed JSON, incomplete output)
+
+\grpoversion{Version 3: Adjusted 4-Tier Reward Structure, with ``important\_lines'' spray threshold and Ground Truth lines > 99th percentile dropped}{ver:grpo_4tier_improved}
+\end{itemize}
+
+% While the 5-tier system successfully reduced formatting errors, the aggressive 4-tier system provided a sharper gradient signal that ultimately resulted in superior discriminative performance on the evaluation benchmarks.
+
+\subsubsection{GRPO Training Runs}
+
+Both GRPO runs shared the following common configuration: learning rate $1 \times 10^{-6}$, training batch size of 60 prompts per iteration, mini-batch size 48, micro-batch size 1 per GPU, max context of 40,960 tokens (28,680 prompt + 12,279 response), FSDP2 with parameter and optimizer offload across 3 H100 GPUs, and KL coefficient $\beta = 0$ following recent research showing that KL penalties are not essential for GRPO-style training \cite{dapo, drgrpo}. The rollout backend was SGLang \cite{sglang} with Top-P 0.95 and Top-K 20.
+
+\paragraph{Version 1: 4-Tier Rewards, Hint-Free (Best Performance)}
+This run used the full deduplicated dataset (24,440 training samples, 1,286 validation samples generated from the 12,912 deduplicated functions) with hint-free prompts for both SFT and GRPO. The SFT dataset paired hint-free prompts with only the response portion of the teacher's output. The 4-tier reward structure was used with rollout temperature 1.0 and $G=16$ generations per prompt.
+
+\paragraph{Version 2: 5-Tier Rewards, SFT with Hints}
+This run tested the expanded 5-tier reward structure (adding the 1.25 high-precision tier and raising the format reward to 0.15) with a slightly reduced rollout temperature of 0.975. Additionally, the SFT checkpoint used for this run was trained with hints re-introduced during the SFT phase, to test whether providing vulnerability context during supervised learning would improve the GRPO starting point stability-wise. The number of generations per prompt remained $G=16$.
+
+\paragraph{Version 3: Adjusted 4-Tier Reward Structure, with ``important\_lines'' spray threshold and Ground Truth lines > 99th percentile dropped}
+
+
+\section{Evaluation}
+
+Evaluation was conducted on a combined test set consisting of:
+\begin{itemize}
+\item \textbf{PrimeVul test set:} 407 vulnerability pairs (814 samples)
+\item \textbf{PrimeVul validation set:} 354 vulnerability pairs
+\item \textbf{SVEN validation set:} 209 vulnerability pairs (unused during training)
+\end{itemize}
+This yields a total of 970 pairs (1,940 samples). All results reported below use this combined test set unless otherwise stated. Each model was evaluated at multiple temperatures (0.2, 0.4, 0.6) to assess sensitivity; we report results at the temperature yielding the best P-C for each model.
+
+All models from the current iteration were evaluated using the training prompt format: a structured prompt with line numbers requesting JSON output, without any hints about vulnerability status or changed lines. Earlier iterations additionally used the \texttt{std\_cls} format (a simple classification prompt requesting only YES/NO), which remains in the tables for historical comparison.
+
+\section{Results}
+
+\paragraph{Pair-wise Metrics}
+The pair-wise metrics measure the model's ability to correctly classify both samples in a vulnerability pair (vulnerable function + patched function):
+\begin{itemize}
+  \item \textbf{P-C (Pair-Correct) $\uparrow$}: Both samples correctly classified
+  \item \textbf{P-V (Pair-Vulnerable) $\downarrow$}: Both incorrectly labeled as vulnerable (false positive bias)
+  \item \textbf{P-B (Pair-Benign) $\downarrow$}: Both incorrectly labeled as benign (false negative bias)
+  \item \textbf{P-R (Pair-Reversed) $\downarrow$}: Labels swapped (vulnerable$\leftrightarrow$patched)
+\end{itemize}
+
+\subsection{Initial Experiments: LoRA Fine-Tuning on Qwen3-8B}
+In our first iteration (\vcodeSFT{ver:data_sem2_primevulonly}{ver:teacher_base}{ver:sft_lora}), we tested the viability of reasoning-augmented fine-tuning using Low-Rank Adaptation (LoRA) on a 4-bit quantized Qwen3-8B model, trained strictly on the PrimeVul paired dataset. The fine-tuned model demonstrated a significant relative improvement over its stock baseline on the PrimeVul test set: the F1-score increased from 0.325 to 0.427, and the crucial Pair-wise Correct (P-C) metric rose from 12.78\% to 18.67\% (an approximately 46\% relative increase). This improvement primarily came from a reduction in the model's tendency to falsely label both samples as benign, proving that explicitly teaching the model to reason about vulnerabilities was a promising direction for scaling up to full parameter fine-tuning and reinforcement learning.
+
+\subsection{Combined Dataset Results (970 pairs)}
+
+Table~\ref{tab:all_results} presents all evaluated models on the combined test set. For models evaluated at multiple temperatures, we report the temperature yielding the best P-C. Where multiple evaluation runs exist, we report the single best run (averaged metrics across runs are noted in text). The table tracks the full lineage of each model: which dataset version, SFT variant, prompt style, and reward structure were used.
+
+Models are identified by a code \texttt{D\#-T\#-S\#-G\#} indicating their Dataset, Teacher Annotation, SFT, and GRPO versions respectively. Click any component of the code to jump to its methodology section.
+
+\begin{table}[H]
+\centering
+\caption{Combined Dataset Results -- All Model Variants (970 pairs, training prompt format)}
+\label{tab:all_results}
+\resizebox{\textwidth}{!}{%
+\begin{tabular}{lccccccl}
+\toprule
+\textbf{Model} & \textbf{Acc} & \textbf{F1} & \textbf{P-C (\%)} & \textbf{P-V (\%)} & \textbf{P-B (\%)} & \textbf{P-R (\%)} & \textbf{Notes} \\
+\midrule
+\multicolumn{8}{l}{\textit{Baselines}} \\
+Qwen3-4B (Base) & 0.519 & 0.522 & 23.0 & 29.8 & 28.5 & 18.6 & temp 0.4 \\
+Qwen3-32B (Base, teacher) & 0.552 & 0.597 & 23.5 & 42.5 & 20.2 & 13.4 & temp 0.2 \\
+\midrule
+\multicolumn{8}{l}{\textit{GRPO Run 1 (\vcode{ver:data_func}{ver:teacher_hintfree}{ver:sft_hintfree}{ver:grpo_4tier})}} \\
+\vcodeSFT{ver:data_func}{ver:teacher_hintfree}{ver:sft_hintfree} (SFT trainrun1, hint-free) & 0.504 & 0.415 & 22.3 & 12.9 & 43.7 & 21.2 & temp 0.6, avg 2 runs \\
+\vcodeSFT{ver:data_func}{ver:teacher_hintfree}{ver:sft_hintfree} (SFT trainrun2, hint-free) & 0.542 & 0.464 & 26.7 & 11.7 & 43.3 & 18.3 & temp 0.6 \\
+\textbf{\vcode{ver:data_func}{ver:teacher_hintfree}{ver:sft_hintfree}{ver:grpo_4tier}} (GRPO 4-tier, best) & \textbf{0.561} & \textbf{0.495} & \textbf{28.4} & 13.9 & 40.6 & 17.1 & temp 0.6, best of 3 \\
+\vcode{ver:data_func}{ver:teacher_hintfree}{ver:sft_hintfree}{ver:grpo_4tier} (GRPO 4-tier, avg) & 0.534 & 0.469 & 25.8 & 14.6 & 40.1 & 19.5 & temp 0.6, spread 4.8pp \\
+\midrule
+\multicolumn{8}{l}{\textit{GRPO Run 2 (\vcode{ver:data_func}{ver:teacher_hintfree}{ver:sft_hints_ablation}{ver:grpo_5tier})}} \\
+\vcodeSFT{ver:data_func}{ver:teacher_hintfree}{ver:sft_hints_ablation} (SFT with hints) & 0.560 & 0.611 & 26.2 & 42.4 & 17.6 & 13.8 & temp 0.4, best of 3 \\
+\vcode{ver:data_func}{ver:teacher_hintfree}{ver:sft_hints_ablation}{ver:grpo_5tier} (GRPO 5-tier, best) & 0.541 & 0.581 & 24.6 & 39.2 & 19.8 & 16.4 & temp 0.6, best of 4 \\
+\vcode{ver:data_func}{ver:teacher_hintfree}{ver:sft_hints_ablation}{ver:grpo_5tier} (GRPO 5-tier, avg) & 0.536 & 0.582 & 22.8 & 39.2 & 19.8 & 16.4 & temp 0.6, spread 3.5pp \\
+\bottomrule
+\end{tabular}%
+}
+\end{table}
+
+\subsubsection{Historical Results (std\_cls Prompt Format)}
+
+For completeness, Table~\ref{tab:historical_stdcls} shows earlier models evaluated with the \texttt{std\_cls} prompt format, which was used in our initial iterations. These results are not directly comparable to the training prompt format above due to the different prompting approach.
+
+\begin{table}[H]
+\centering
+\caption{Historical Results -- std\_cls Prompt Format (970 pairs)}
+\label{tab:historical_stdcls}
+\begin{tabular}{lcccccc}
+\toprule
+\textbf{Model} & \textbf{Acc} & \textbf{F1} & \textbf{P-C (\%) $\uparrow$} & \textbf{P-V (\%)} & \textbf{P-B (\%)} & \textbf{P-R (\%)} \\
+\midrule
+Qwen3-4B (Base) & 0.523 & 0.266 & 9.5 & 7.1 & 77.7 & 5.6 \\
+\vcodeSFT{ver:data_commit}{ver:teacher_base}{ver:sft_hints} (SFT, V2 dataset) & 0.550 & 0.539 & 26.5 & 26.0 & 30.8 & 16.7 \\
+\midrule
+\multicolumn{7}{l}{\textit{Initial Iteration (816 pairs, Qwen3-8B + LoRA)}} \\
+Qwen3-8B (Base) & 0.528 & 0.325 & 12.8 & 9.1 & 70.0 & 8.1 \\
+Qwen3-8B (LoRA) & 0.528 & 0.427 & 18.7 & 14.7 & 52.6 & 14.0 \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\subsection{Analysis}
+
+The GRPO model trained with the 4-tier reward structure on hint-free prompts achieves our peak discriminative performance of \textbf{28.4\% P-C}, outperforming all SFT checkpoints. This represents a substantial improvement from the initial Qwen3-8B LoRA baseline (18.67\% P-C) established in earlier iterations of this research.
+
+% \subsubsection{Comparison with Previous Iterations (Qwen3-8B + LoRA)}
+% In our initial exploratory research, we fine-tuned Qwen3-8B using LoRA on a smaller dataset (816 pairs from PrimeVul only). That approach achieved a P-C score of 18.67\% (up from a 12.78\% baseline on that specific dataset). Our current full SFT on Qwen3-4B with the expanded dataset (12,912 deduplicated functions) achieves a P-C of 26.7\% on the unified dataset, and our GRPO model reaches 28.4\%. This progression demonstrates that larger, more diverse training data coupled with full-parameter fine-tuning and reinforcement learning significantly outperforms parameter-efficient methods like LoRA, even when utilizing a smaller foundational model.
+% 
+% \begin{table}[H]
+% \centering
+% \caption{Comparison: Initial Iterations (Qwen3-8B + LoRA) vs. Current Architecture (Qwen3-4B + SFT) -- std\_cls prompt}
+% \label{tab:semester_comparison}
+% \begin{tabular}{lccccccc}
+% \toprule
+% \textbf{Model} & \textbf{Acc} & \textbf{F1} & \textbf{P-C (\%) $\uparrow$} & \textbf{P-V (\%) $\downarrow$} & \textbf{P-B (\%) $\downarrow$} & \textbf{P-R (\%) $\downarrow$} \\
+% \midrule
+% \multicolumn{7}{l}{\textit{Initial Iteration (816 pairs training data, LoRA)}} \\
+% Qwen3-8B (Base) & 0.528 & 0.325 & 12.78 & 9.09 & 70.02 & 8.11 \\
+% Qwen3-8B (LoRA) & 0.528 & 0.427 & 18.67 & 14.74 & 52.58 & 14.00 \\
+% \midrule
+% \multicolumn{7}{l}{\textit{Current Architecture (12,912 functions training data, full SFT)}} \\
+% Qwen3-4B (Base) & 0.503 & 0.189 & 6.2 & 5.4 & 83.0 & 5.4 \\
+% Qwen3-4B (SFT) & \textbf{0.554} & \textbf{0.533} & \textbf{26.3} & 24.6 & 33.7 & 15.5 \\
+% \bottomrule
+% \end{tabular}
+% \end{table}
+
+\subsection{Examples}
+
+To illustrate the practical impact of fine-tuning, we present examples where the SFT model correctly detected vulnerabilities that the base model missed:
+
+\textbf{Example 1: TensorFlow -- Missing Parameter Validation (CWE-20)}
+
+\begin{lstlisting}[language=C++, caption={TensorFlow SetUnknownShape function with missing validation}]
+Status SetUnknownShape(const NodeDef* node, int output_port) {
+    shape_inference::ShapeHandle shape = 
+        GetUnknownOutputShape(node, output_port);
+    
+    InferenceContext* ctx = GetContext(node);
+    if (ctx == nullptr) {
+        return errors::InvalidArgument("Missing context");
+    }
+    
+    ctx->set_output(output_port, shape);  // output_port NOT validated!
+    return Status::OK();
+}
+\end{lstlisting}
+
+The vulnerability occurs because \texttt{output\_port} is validated in \texttt{GetUnknownOutputShape} but not before being passed to \texttt{ctx->set\_output()}, which could lead to out-of-bounds access. The base model predicted this as \textbf{NOT VULNERABLE}, while the SFT model correctly identified it as \textbf{VULNERABLE}. This is reflected in their reasoning:
+\begin{itemize}
+    \item Base: “…No user input, internal API, ctx null check exists…“
+    \item SFT: “…output\_port could be out-of-bounds, no validation before set\_output…"
+\end{itemize}
+
+
+\textbf{Example 2: deark -- Division by Zero from File Input (CWE-369)}
+
+\begin{lstlisting}[language=C, caption={deark bitmap parsing with division by zero vulnerability}]
+void fmtutil_macbitmap_read_pixmap_only_fields(deark *c, 
+        dbuf *f, struct fmtutil_macbitmap_info *bi, i64 pos) {
+    
+    bi->pixelsize = dbuf_getu16be(f, pos+18);  // Read from file
+    
+    // No validation of pixelsize!
+    bi->pdwidth = (bi->rowbytes * 8) / bi->pixelsize;  // Division by zero!
+    
+    if (bi->pdwidth < bi->npwidth) {
+        bi->pdwidth = bi->npwidth;
+    }
+}
+\end{lstlisting}
+
+Here, \texttt{pixelsize} is read directly from user-controlled file input without validation. If the file contains 0 for this field, it causes a division by zero crash. The base model missed this vulnerability, assuming valid data and predicting \textbf{NOT VULNERABLE}, while the SFT model treats file input as untrusted, and correctly detected it as \textbf{VULNERABLE}. Again, this is reflected in the reasoning:
+\begin{itemize}
+    \item Base: “…Processing known file format, data expected to be valid…“
+    \item SFT: “…pixelsize read from untrusted input, division by zero if zero…“
+\end{itemize}
+
+\textbf{Example 3: TensorFlow -- Unchecked Iterator Access (CWE-824)}
+
+\begin{lstlisting}[language=C++, caption={TensorFlow GetInitOp with unchecked iterator dereference}]
+Status GetInitOp(...) {
+  const auto& init_op_sig_it = 
+      meta_graph_def.signature_def().find(kSavedModelInitOpSignatureKey);
+  if (init_op_sig_it != sig_def_map.end()) {
+    *init_op_name = init_op_sig_it->second.outputs()
+                        .find(kSavedModelInitOpSignatureKey)
+                        ->second.name();  // Potential crash!
+  }
+  return Status::OK();
+}
+\end{lstlisting}
+
+The vulnerability occurs when accessing \texttt{init\_op\_sig\_it->...->second.name()}. If the inner \texttt{find()} returns \texttt{end()}, dereferencing it causes undefined behavior (crash or memory corruption). The SFT model's reasoning: 
+\begin{lstlisting}
+Another angle: Are there any unchecked assumptions? When accessing init_op_sig_it->second.outputs().find(...)}, if the outputs don't have the key, find() would return an iterator to end, and then accessing .name() would be undefined behavior... This is a possible use-after-free or crash, which could be exploited.
+\end{lstlisting}
+\textbf{Example 4: GPAC -- Out-of-Bounds Array Access (CWE-125)}
+
+\begin{lstlisting}[language=C, caption={GPAC SVC slice parsing with missing bounds check}]
+static s32 svc_parse_slice(GF_BitStream *bs, AVCState *avc, 
+                           AVCSliceInfo *si) {
+    s32 pps_id = gf_bs_read_ue_log(bs, "pps_id");
+    if (pps_id > 255) return -1;
+    
+    si->pps = &avc->pps[pps_id];           // Checked OK
+    si->pps->id = pps_id;
+    
+    si->sps = &avc->sps[si->pps->sps_id + GF_SVC_SSPS_ID_SHIFT];  // NOT CHECKED!
+    if (!si->sps->log2_max_frame_num) return -2;
+    // ...
+}
+\end{lstlisting}
+
+The code validates \texttt{pps\_id} before using it as an array index, but fails to validate \texttt{sps\_id + GF\_SVC\_SSPS\_ID\_SHIFT} before accessing the \texttt{sps} array. If \texttt{sps\_id} is large, this causes out-of-bounds memory access. The base model missed this because it saw the \texttt{pps\_id} validation and assumed all indices were checked. The SFT model correctly identified the missing validation on the second array access.
+
+\textbf{Example 5: TensorFlow -- Memory Exhaustion (CWE-400) -- False Negative}
+
+This example shows a case where \emph{both} models failed:
+
+\begin{lstlisting}[language=C++, caption={TensorFlow constant folding with unbounded allocation}]
+Status ConstantFolding::IsSimplifiableReshape(const NodeDef& node,
+                            const GraphProperties& properties) const {
+  const NodeDef* new_shape = node_map_->GetNode(node.input(1));
+  if (!IsReallyConstant(*new_shape)) {
+    return errors::InvalidArgument("Shape must be constant");
+  }
+  
+  TensorVector outputs;
+  Status s = EvaluateNode(*new_shape, TensorVector(), &outputs);
+  
+  if (outputs[0]->dtype() == DT_INT32) {
+    std::vector<int32> shp;
+    for (int i = 0; i < outputs[0]->NumElements(); ++i) {  // No bounds check!
+      int32_t dim = outputs[0]->flat<int32>()(i);
+      shp.push_back(dim);  // Memory exhaustion if NumElements() is huge
+    }
+  }
+}
+\end{lstlisting}
+
+The vulnerability: \texttt{NumElements()} comes from user-controlled input (the tensor shape). An attacker can craft a tensor claiming to have $2^{31}$ elements, causing the \texttt{push\_back} operations to exhaust memory (Denial of Service). Both models were distracted by the error handling and missed the missing bounds check on the loop iteration count.
+
+These examples demonstrate that fine-tuning helps the model recognize vulnerability patterns including: parameter validation requirements across function calls, security implications of untrusted input in arithmetic operations, unchecked iterator dereferences, and missing bounds checks on array indices. However, other vulnerabilities like resource exhaustion through unbounded loops remain challenging.
+
+\section{Conclusion and Future Work}
+
+% Supervised fine-tuning using our consolidated dataset significantly improves LLM-based vulnerability detection. The SFT model achieved a 35\% relative improvement in pair-wise classification accuracy (P-C) over the base Qwen3-4B model on the PrimeVul test set, with improvements of 6--7 percentage points in accuracy and F1 scores across evaluation configurations. The consolidated dataset pipeline successfully merged PrimeVul, SVEN, and SecVulEval sources, creating approximately 6,600 unique samples with rich metadata including CVE descriptions and line-level change information.
+
+% However, GRPO reinforcement learning training proved challenging due to infrastructure limitations. Despite experimenting with multiple frameworks (TRL+DeepSpeed, veRL container, Unsloth, veRL native), only training on a small subset (64 samples) succeeded. The limited GRPO training did not yield improvements over SFT, with evaluation showing slightly lower performance, due to insufficient training data.
+
+% Future work could include:
+% \begin{itemize}
+% \item Investigating the rollout slowdowns and various errors to enable training on the full dataset.
+
+% \item Experimenting with recent advances such as DAPO \cite{dapo}, which should offer improved training stability and efficiency.
+
+% \item Choosing newer, maybe code-specialized models (e.g. Qwen3-Coder-Next, DeepSeek-V3.2, Kimi K2.5) that may have better inherent understanding of code security patterns.
+
+% \item The current five-tier discrete reward may not prove that relevant, perhaps SAST tools could be used to provide more fine-grained feedback.
+% \end{itemize}
+
+\section*{Resources}
+Models and datasets from this research are publicly available:
+\begin{itemize}
+\item \href{https://huggingface.co/Andrefty/qwen3-4b-vuln-sft-research}{SFT Model}
+\item \href{https://huggingface.co/Andrefty/qwen3-4b-vuln-grpo-verl}{GRPO Model}
+\item \href{https://huggingface.co/datasets/Andrefty/Research_merged_dataset}{Merged Dataset}
+\item \href{https://huggingface.co/datasets/Andrefty/Research_merged_finetune_dataset}{Fine-tuning Dataset} 
+\end{itemize}
+
+% Bibliography / References.
+% \renewcommand\bibname{References}
+% \clearpage\phantomsection\addcontentsline{toc}{section}{\bibname}
+% \bibliographystyle{apacite}
+\bibliographystyle{unsrt}
+\bibliography{bibliography}
+
+\end{document}
