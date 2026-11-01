@@ -11,10 +11,10 @@
 % before loading best_roai_thesis_awards_2026
 
 % ready for submission
-\usepackage{best_roai_thesis_awards_2026}
+% \usepackage{best_roai_thesis_awards_2026}
 
 % to compile a final version
-% \usepackage[final]{best_roai_thesis_awards_2026}
+\usepackage[final]{best_roai_thesis_awards_2026}
 
 \usepackage[utf8]{inputenc} % allow utf-8 input
 \usepackage[T1]{fontenc}    % use 8-bit T1 fonts
@@ -169,7 +169,7 @@ A central finding is the trade-off between discrimination and parsability. The h
 
 The teacher model (Qwen3-32B) achieves only 22.39\% P-C, confirming that fine-tuned student models genuinely surpass the teacher's zero-shot capability through the distillation and RL process. Interestingly, the SFT prompt format shapes the student's default behaviour at evaluation time (when no hints are present): hints-in-SFT models, trained with explicit vulnerability cues, become reliant on those cues and over-predict vulnerabilities when they are absent (elevated P-V), while hint-free SFT models, never exposed to metadata context, become conservative and default to benign predictions (high P-B).
 
-The GRPO reward structure proved critical for training dynamics. The 5-tier reward (G2), despite yielding higher absolute training rewards, inadvertently taught the model to exploit the localization component by predicting excessive line numbers. The introduction of spray guards and GT line capping in G3 successfully mitigated this, demonstrating that reward engineering requires careful attention to potential exploitation strategies.
+The GRPO reward structure proved critical for training dynamics. The 5-tier reward (G2), despite yielding higher absolute training rewards, inadvertently taught the model to exploit the localization component by predicting excessive line numbers. The introduction of spray guards and GT line capping in G3 successfully mitigated this, showing that reward engineering requires careful attention to potential exploitation strategies.
 
 \section{Conclusion}
 
@@ -177,7 +177,13 @@ We demonstrated that reasoning-augmented fine-tuning combined with GRPO reinforc
 
 \section{Limitations}
 
-Our evaluation relies on the PrimeVul and SVEN benchmarks, which focus on C/C++ functions in open-source projects, limiting generalizability to other languages and proprietary codebases. The 4B-parameter student model may lack capacity for more complex vulnerability patterns. All P-C scores exhibit notable run-to-run variance (up to $\pm$6.39 on PrimeVul), making definitive ranking between configurations difficult. The best model's parsability (1,693/1,940) means approximately 12.7\% of responses are invalid JSON, limiting practical deployment. Finally, our reward function relies on line-level overlap with ground truth, which may not capture semantic correctness of vulnerability localization.
+Our evaluation relies on the PrimeVul benchmark, which focuses on C/C++ functions in open-source projects, limiting generalizability to other languages and potentially proprietary codebases. The 4B parameter student model may lack capacity for more complex vulnerability patterns. All P-C scores exhibit notable run-to-run variance (up to $\pm$6.39 on PrimeVul), making definitive ranking between configurations difficult. The best model's parsability (1,693/1,940) means approximately 12.7\% of responses are invalid JSON, limiting practical deployment. Finally, our reward function relies on line-level overlap with ground truth, which may not capture semantic correctness of vulnerability localization.
+
+\section{AI Transparency Statement}
+\begin{itemize}
+    \item \textbf{Use of AI in methodology:} The core research pipeline uses Qwen3-32B (Alibaba) as a teacher model to generate reasoning-augmented training annotations, and Qwen3-4B and Qwen3-8B as the student models fine-tuned via SFT and GRPO. SGLang~\cite{sglang} was used for model inference during dataset generation and evaluation.
+    \item \textbf{Use of AI in writing:} Artificial intelligence tools (Claude 4.6, Anthropic) were used only to assist with language refinement, and improving the clarity and consistency of the manuscript.
+\end{itemize}
 
 \begin{ack}
 This work was conducted as part of a Master's thesis at the National University of Science and Technology POLITEHNICA Bucharest, supervised by Conf.\ Traian Rebedea. Training was performed on the UPB HPC cluster (3$\times$H100 GPUs). Models and datasets are publicly available at \url{https://huggingface.co/Andrefty}.

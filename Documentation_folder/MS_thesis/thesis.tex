@@ -1,5 +1,7 @@
 \documentclass[12pt,a4paper]{article}
 
+\setcounter{tocdepth}{4}
+\setcounter{secnumdepth}{4}
 \usepackage[utf8]{inputenc} % pentru suport diacritice
 % \usepackage[romanian]{babel} % setări pentru limba română
 \renewcommand\familydefault{\sfdefault} % sans serif
@@ -122,7 +124,7 @@ Computer Science and Engineering Department\\}
 \begin{tabular*}{\textwidth}{@{\extracolsep{\fill}}p{6cm}r}
 &{\large\textbf{#5}}\vspace{10pt}\\      % scientific advisor
 &{\large \AdvisorA}\\                    % advisor name A
-&{\large \AdvisorB}                      % advisor name B
+% &{\large \AdvisorB}                      % advisor name B
 \end{tabular*}
 \vspace{20pt}
 \begin{center}
@@ -212,12 +214,10 @@ Computer Science and Engineering Department\\}
 %%   Câmpurile aferente rezumatului
 %%
 \newcommand{\AbstractEN}{
-Large Language Models (LLMs) show promise for automated vulnerability detection but struggle to distinguish between vulnerable code and its patched counterpart. This research advances LLM-based vulnerability detection through a multi-stage pipeline combining dataset consolidation, reasoning-augmented fine-tuning, and reinforcement learning. We merge three complementary vulnerability datasets (PrimeVul, SVEN, SecVulEval) into 12,912 unique deduplicated functions through a function-level deduplication strategy, then use a 32B teacher model to generate reasoning-augmented training annotations that teach the student model not just the classification outcome but the analytical process leading to it. Supervised fine-tuning of Qwen3-4B on this dataset, followed by Group Relative Policy Optimization (GRPO) with a tiered reward structure evaluating both classification accuracy and vulnerable line localization, achieves a Pair-wise Correct score of 28.38\% on a combined benchmark of 970 vulnerability pairs and 25.93\% on the PrimeVul test split, a 100\% relative improvement over GPT-4's reported performance in PrimeVul \cite{primevul}. The GRPO model also surpasses all SFT-only variants, the best of which reaches 25.51\% P-C, confirming that reinforcement learning provides a measurable gain beyond supervised fine-tuning alone. Our experiments further reveal that hint-free training prompts produce stronger discriminative models at the cost of output parsability, while iterating on the GRPO reward structure proves critical for controlling undesirable behaviours such as line prediction spraying. Despite these improvements, all configurations still exhibit notable inconsistencies and the overall scores show significant run to run variance, indicating considerable room for improvement. All models and datasets are publicly available.
+Large Language Models (LLMs) show promise for automated vulnerability detection but struggle to distinguish between vulnerable code and its patched counterpart. This research advances LLM-based vulnerability detection through a multi-stage pipeline combining dataset consolidation, reasoning-augmented fine-tuning, and reinforcement learning. We merge three code vulnerability datasets (PrimeVul, SVEN, SecVulEval) into a new dataset containing 12,912 unique deduplicated functions through a function-level deduplication strategy, then use Qwen3-32B as a teacher model to generate reasoning-augmented training data that teach the student model not just the classification outcome but the analytical process leading to it. Supervised fine-tuning of Qwen3-4B on this dataset, followed by Group Relative Policy Optimization (GRPO) with a tiered reward structure evaluating both classification accuracy and vulnerable line localization, achieves a Pair-wise Correct score of 28.38\% on a combined benchmark of 970 vulnerability pairs and 25.93\% on the PrimeVul test split, a 100\% relative improvement over GPT-4's reported performance in PrimeVul \cite{primevul}. The GRPO model also surpasses all SFT-only variants, the best of which reaches 25.51\% P-C, confirming that reinforcement learning provides a measurable gain beyond supervised fine-tuning alone. Our experiments further reveal that hint-free training prompts produce stronger discriminative models at the cost of output parsability, while iterating on the GRPO reward structure proves critical for controlling undesirable behaviours such as line prediction spraying. Despite these improvements, all configurations still exhibit notable inconsistencies and the overall scores show significant run to run variance, indicating room for improvement.
 }
 
-\newcommand{\AbstractRO}{Modelele lingvistice de mari dimensiuni (LLM) prezintă potențial pentru detectarea automată a vulnerabilităților, dar întâmpină dificultăți în a distinge între codul vulnerabil și varianta sa corectată. Această cercetare avansează detectarea vulnerabilităților bazată pe LLM printr-un pipeline multi-etapă care combină consolidarea seturilor de date, ajustarea fină augmentată cu raționament și învățarea prin recompensă. Combinăm trei seturi de date complementare privind vulnerabilitățile (PrimeVul, SVEN, SecVulEval) în 12.912 funcții unice deduplicate printr-o strategie de deduplicare la nivel de funcție, apoi utilizăm un model profesor de 32B pentru a genera adnotări de antrenament augmentate cu raționament care învață modelul student nu doar rezultatul clasificării, ci și procesul analitic care conduce la acesta. Ajustarea fină supervizată a modelului Qwen3-4B pe acest set de date, urmată de optimizarea relativă de grup a politicii (GRPO) cu o structură de recompense pe niveluri care evaluează atât acuratețea clasificării, cât și localizarea liniilor vulnerabile, atinge un scor Pair-wise Correct de 28,38\% pe un benchmark combinat de 970 de perechi de vulnerabilități și 25,93\% pe subsetul de test PrimeVul---acesta din urmă reprezentând o îmbunătățire relativă de 100\% față de performanța raportată a GPT-4 pe PrimeVul și o îmbunătățire de 39\% față de linia de bază inițială LoRA. Experimentele noastre relevă, de asemenea, că prompturile de antrenament fără indicii produc modele cu o capacitate discriminativă mai puternică, dar cu un cost asupra parsabilității ieșirilor, în timp ce iterarea asupra structurii de recompense GRPO se dovedește critică pentru controlul comportamentelor nedorite, cum ar fi predicția excesivă a liniilor. Toate modelele și seturile de date sunt disponibile public.
-% \vspace{3\baselineskip}
-% \textbf{Keywords}: max 5, e.g., Language Models, Natural Language Processing
+\newcommand{\AbstractRO}{Modelele lingvistice de mari dimensiuni (LLM) prezintă potențial pentru detectarea automată a vulnerabilităților în codul sursă, dar întâmpină dificultăți în a distinge între codul vulnerabil și varianta sa corectată. Această lucrare avansează detecția vulnerabilităților în cod sursă folosind LLM-uri printr-un proces în mai multe etape care combină consolidarea a mai multor seturi de date, antrenarea supervizată folosind raționamente generate de un model LLM mai mare  și învățarea prin recompensă (reinforcement learning). Îmbinăm trei seturi de date ce conțin vulnerabilități de cod sursă (PrimeVul, SVEN, SecVulEval) în 12.912 funcții unice, pe care le deduplicăm printr-o strategie la nivel de funcție, apoi utilizăm modelul Qwen3-32B ca model profesor pentru a genera un set de date cu modele de raționament care învață modelul student nu doar rezultatul clasificării, ci și procesul analitic care conduce la acesta. Antrenăm supervizat modelul Qwen3-4B pe acest set de date, apoi folosim GRPO cu o structură de recompense pe mai multe niveluri care evaluează atât acuratețea clasificării, cât și localizarea liniilor vulnerabile, obținând un scor Pair-wise Correct (P-C) de 28,38\% în benchmark-ul combinat de 970 de perechi de vulnerabilități și 25,93\% pe subsetul de test PrimeVul, o îmbunătățire relativă de 100\% față de performanța raportată a GPT-4 în lucrarea PrimeVul \cite{primevul}. Modelul GRPO depășește, de asemenea, toate variantele bazate exclusiv pe antrenarea supervizată, dintre care cea mai bună atinge 25,51\% P-C, confirmând faptul că învățarea prin recompensă oferă un câștig măsurabil dincolo de antrenarea supervizată. Experimentele noastre arată că prompturile de antrenament fără indicii (hint-free) produc modele cu o capacitate discriminativă mai puternică, dar cu un cost asupra parsabilității ieșirilor, în timp ce structura de recompense folosită la GRPO se dovedește esențială pentru controlul comportamentelor nedorite, cum ar fi predicția excesivă a liniilor. În ciuda acestor îmbunătățiri, toate configurațiile prezintă instabilitate, iar scorurile generale arată o varianță semnificativă între rulări, indicând faptul că sunt posibile îmbunătățiri suplimentare.
 }
 
 
@@ -286,10 +286,10 @@ The dataset preparation evolved across a couple of major versions to maximize da
 
 \textbf{SecVulEval} adds additional CVE and CWE linked samples, with line level change metadata.
 
-\dataversion{Version 1: PrimeVul Only}{ver:data_sem2_primevulonly}
+\dataversion{PrimeVul Only}{ver:data_sem2_primevulonly}
 In our initial experiments, we relied exclusively on the paired dataset provided by the PrimeVul benchmark \cite{primevul}. This dataset consists of paired vulnerable functions and their corresponding fixed, non-vulnerable versions, providing 1,632 entries (816 pairs), which were used to establish baseline performance and conduct early dataset generation experiments. However, relying solely on the stock PrimeVul dataset limited the diversity and metadata richness of our training data. This limitation prompted the integration of additional datasets and deduplication strategies in subsequent versions to support full-scale fine-tuning and reinforcement learning.
 
-\dataversion{Version 2: Commit-Level Deduplication}{ver:data_commit}
+\dataversion{Commit-Level Deduplication}{ver:data_commit}
 The initial merging process followed a priority-based deduplication strategy using \texttt{commit\_id} as the primary key. When samples from multiple sources shared the same commit, SVEN data was prioritized due to its manual verification, followed by merging CVE descriptions from any available source. The merging script preserves all \texttt{line\_changes} information, which is critical for training the model to identify specific vulnerable lines.
 
 \begin{lstlisting}[caption={Example of a merged dataset entry (structure)}]
@@ -311,7 +311,7 @@ The initial merging process followed a priority-based deduplication strategy usi
 
 After commit-level deduplication and filtering out samples where the vulnerable function was identical to the patched function, this consolidated dataset contained approximately 6,600 unique samples.
 
-\dataversion{Version 3: Function-Level Deduplication}{ver:data_func}
+\dataversion{Function-Level Deduplication}{ver:data_func}
 While commit-level deduplication prevented identical overlaps, it introduced a significant flaw: commits that patched multiple different functions were collapsed into a single pair, dropping thousands of valid vulnerability pairs.
 
 To address this, we implemented a function-level deduplication pipeline. The process groups samples by \texttt{(commit\_id, func\_name)} and applies a three-tier conflict resolution strategy. First, each function's code is normalized (whitespace stripped, empty lines removed, lowercased) and assigned a SHA-256 hash. Entries within the same group that share an identical hash are true duplicates; the best entry is selected by source priority (SVEN $>$ SecVulEval $>$ PrimeVul) and metadata from all losers is merged into the winner (fill-only semantics: existing fields are never overwritten).
@@ -398,7 +398,7 @@ This function-level deduplication and data quality pipeline successfully recover
 
 To create training data for the reinforcement learning phase, we implemented a teacher model annotation pipeline using Qwen3-32B. We generated reasoning traces for each vulnerability sample, following structured prompt formats designed to elicit both classification and localization information.
 
-\teacherversion{Version 0 (Semester 2): Plain text prompt}{ver:teacher_sem2}
+\teacherversion{Plain text prompt}{ver:teacher_sem2}
 In our initial experiments, the prompting strategy was designed to elicit a simple, structured classification response without relying on a formal JSON schema. Each prompt contained the full, numbered code snippet, the associated CVE description if available, and ground-truth hints explicitly stating whether the snippet was vulnerable and pointing to the modified lines, and finally, a direct instruction forced the model to perform its reasoning internally before providing a parseable answer: \texttt{"Please indicate your analysis result *only* with one of the following exact statements...: '(1) YES:...' or '(2) NO:...'"}.
 
 \begin{lstlisting}[language=Python, caption={Example teacher annotation prompt from Semester 2 (using the wget example)}]
@@ -428,7 +428,7 @@ Please indicate your analysis result with one of the options:
 Only reply with one of the options above. Do not include any further information.
 \end{lstlisting}
 
-\teacherversion{Version 1: JSON schema and additional hint data}{ver:teacher_base}
+\teacherversion{JSON schema and additional hint data}{ver:teacher_base}
 \begin{lstlisting}[language=Python, caption={Example system prompt (truncated) used for teacher model annotation}]
 You are an expert code security analyst. Analyze the provided 
 code and determine if it contains any security vulnerabilities.
@@ -466,7 +466,7 @@ Each sample continues to be formatted with line numbers to facilitate vulnerable
 
 The annotation process prioritizes samples with rich metadata (CVE descriptions). The pipeline uses SGLang \cite{sglang} for inference with Qwen3-32B, with concurrent requests.
 
-\teacherversion{Version 2: Prompt and Schema Refinements}{ver:teacher_hintfree}
+\teacherversion{Prompt and Schema Refinements}{ver:teacher_hintfree}
 This version introduced several refinements to the teacher annotation pipeline. The prompt construction was updated to dynamically include commit messages when token budget allows, with intelligent truncation: if a sample has a CVE description, the commit message is dropped when it would push the prompt below a minimum output size threshold, while if no CVE description is available, the commit message is token-level truncated to fit the remaining space.
 
 Additionally, the output field \texttt{vulnerable\_lines} was renamed to \texttt{important\_lines} so that the output schema makes sense across vulnerable and patched samples, enabling the GRPO reward function to evaluate line localization for patched (fixed) code using \texttt{added\_lines} as ground truth.
@@ -503,10 +503,10 @@ Task: After your reasoning, provide your analysis in JSON format:
  "important_lines": [...], "reasoning_summary": "..."}
 \end{lstlisting}
 
-\teacherversion{Version 3: Hints Re-Introduced for SFT}{ver:teacher_withhints}
+\teacherversion{Hints Re-Introduced for SFT}{ver:teacher_withhints}
 This version is functionally identical to \hyperref[ver:teacher_hintfree]{T\ref*{ver:teacher_hintfree}} for the purpose of teacher annotation. The distinction is in how the resulting dataset is consumed downstream: whereas \hyperref[ver:teacher_hintfree]{T\ref*{ver:teacher_hintfree}} was paired with hint-free SFT prompts (\hyperref[ver:sft_hintfree]{S\ref*{ver:sft_hintfree}}), this version re-introduces the full hint-rich prompt during the SFT training phase as well (\hyperref[ver:sft_hints_ablation]{S\ref*{ver:sft_hints_ablation}}), while GRPO continues to use hint-free prompts exclusively.
 
-\teacherversion{Version 4: Commit Message Dropped When CVE Description Present}{ver:teacher_withhints_drop_commit_msg}
+\teacherversion{Commit Message Dropped When CVE Description Present}{ver:teacher_withhints_drop_commit_msg}
 Upon analysing the reasoning traces produced by the teacher model under \hyperref[ver:teacher_withhints]{T\ref*{ver:teacher_withhints}} (and by extension \hyperref[ver:teacher_hintfree]{T\ref*{ver:teacher_hintfree}}), we observed that in a significant fraction of cases the model devoted roughly half of its reasoning trace to discussing the metadata hints (CVE description, commit message) rather than performing code-level analysis. The commit message in particular was often given much reasoning, possibly because it was often much longer than the CVE description, while also usually containing potentially irrelevant information such as email addresses of the authors of the patch commits, adding little independent signal while consuming a substantial portion of the model's reasoning budget.
 
 To address this redundancy, \hyperref[ver:teacher_withhints_drop_commit_msg]{T\ref*{ver:teacher_withhints_drop_commit_msg}} modifies the prompt construction to unconditionally drop the commit message whenever the sample already has a CVE description. Samples lacking a CVE description continue to receive the commit message (token-truncated to fit the remaining context budget), since it may be the only available natural-language context about the vulnerability. This change preserves the metadata richness of the prompt while reducing reasoning dilution, encouraging the teacher model to focus more on the code itself.
@@ -517,7 +517,7 @@ To address this redundancy, \hyperref[ver:teacher_withhints_drop_commit_msg]{T\r
 \subsection{Phase 1: Supervised Fine-Tuning (SFT)}
 In phase 1 we trained Qwen3-4B, and initially Qwen3-8B, to mimic the teacher model's responses. This phase uses the generated dataset where each sample contains the formatted prompt (in the various ways also described in \ref{sec:teacher_model_annotation}) and the teacher's response (including full reasoning trace in ``thinking mode''). The model learns to produce structured responses, at first formatted just like the ``\texttt{std\_cls}'' prompt format from PrimeVul\cite{primevul}, then later on JSON outputs with classification, vulnerable line identification, and reasoning summaries.
 
-\sftversion{Version 1 (Semester 2): LoRA Fine-Tuning on Qwen3-8B}{ver:sft_lora}
+\sftversion{LoRA Fine-Tuning on Qwen3-8B}{ver:sft_lora}
 Using the initial PrimeVul-only dataset annotated with the basic classification prompt (\hyperref[ver:teacher_sem2]{T\ref*{ver:teacher_sem2}}), we performed an initial round of Low-Rank Adaptation (LoRA) fine-tuning on a 4-bit quantized Qwen3-8B model using Unsloth \cite{unsloth}, in order to test whether teaching a model the explicit reasoning behind vulnerabilities could improve its discriminative capabilities before scaling up to full parameter fine-tuning.
 
 To make training computationally feasible on a single 80GB GPU, we used \textbf{Low-Rank Adaptation (LoRA)}, a parameter-efficient fine-tuning (PEFT) technique that freezes the pre-trained model weights and injects trainable rank-decomposition matrices into the layers of the Transformer architecture, significantly reducing the number of trainable parameters. We applied LoRA adapters across all attention projections (\texttt{q\_proj, k\_proj, v\_proj, o\_proj}) and feed-forward layers (\texttt{gate\_proj, up\_proj, down\_proj}). We utilized an expressive configuration with a LoRA Rank ($r$) of 128, which determines the rank of the decomposition matrices ($W_{\Delta} = B \cdot A$). While a higher rank increases the parameter count, it also allows for more expressive power in the adapter, so we chose a somewhat higher value to ensure the adapter had sufficient expressive power for significant adaptation. This was paired with a LoRA Alpha ($\alpha$) of 128, a scaling factor for the LoRA output that controls the magnitude of the adaptation relative to the original weights, which is typically set equal to the rank. Additional training hyperparameters included a learning rate of $2 \times 10^{-4}$ with a linear scheduler, an effective batch size of 32 (4 per device $\times$ 8 gradient accumulation steps), and a training duration of one full epoch. As shown in Figure \ref{fig:loss}, the training loss exhibited a stable decrease, confirming effective learning from the reasoning-augmented dataset (\hyperref[ver:teacher_sem2]{T\ref*{ver:teacher_sem2}}).
@@ -545,22 +545,22 @@ Building upon the success of the initial LoRA experiment, all subsequent SFT ite
   \item 1 epoch, gradient checkpointing enabled
 \end{itemize}
 
-\sftversion{Version 2 (semester 3, just for reference): SFT with Hints}{ver:sft_hints}
+\sftversion{SFT with Hints}{ver:sft_hints}
 This version represents the first full-parameter fine-tuning run on Qwen3-4B, trained on the commit-level deduplicated dataset (\hyperref[ver:data_commit]{D\ref*{ver:data_commit}}) with teacher annotations from \hyperref[ver:teacher_base]{T\ref*{ver:teacher_base}}. Both prompts and responses included vulnerability hints and metadata context during training.
 
-\sftversion{Version 3 (best semester 4, just for reference): Hint-Free SFT Training Prompts}{ver:sft_hintfree}
+\sftversion{Hint-Free SFT Training Prompts}{ver:sft_hintfree}
 
 While the teacher model annotation uses the full hint-rich prompt to generate high-quality reasoning traces, in this version for the SFT training dataset \iffalse (both SFT and GRPO) \fi we reconstruct hint-free prompts from the merged dataset so that the student model receives only the raw code with line numbers and the JSON output instruction, without any CVE context or vulnerability hints, in hope of making the SFT model more used to the evaluation prompts, while still learning from the teacher's response that was generated with full context. This change compared to the previous version \hyperref[ver:sft_hints]{S\ref*{ver:sft_hints}} aims to make the SFT model more robust and improve its ability to identify vulnerabilities from the code itself rather than relying on metadata cues.
 
-However, this version started to exhibit low parseability, where during several evaluation runs, at all the recorded temperatures (0.2, 0.4, 0.6) there was a noticeable drop (about ~200-300 less) in parsable responses due to the model getting stuck in the reasoning phase, when compared to the previous version \hyperref[ver:sft_hints]{S\ref*{ver:sft_hints}}.
+However, this version started to exhibit low parseability, where during several evaluation runs, at all the recorded temperatures (0.2, 0.4, 0.6) there was a noticeable drop (about $\sim$200-300 less) in parsable responses due to the model getting stuck in the reasoning phase, when compared to the previous version \hyperref[ver:sft_hints]{S\ref*{ver:sft_hints}}.
 
-\sftversion{Version 4 (current semester 4, just for reference): SFT with Hints Re-Introduced (ablation)}{ver:sft_hints_ablation}
+\sftversion{SFT with Hints Re-Introduced (ablation)}{ver:sft_hints_ablation}
 
 Due to the perceived reduction in parsable responses of \hyperref[ver:sft_hintfree]{S\ref*{ver:sft_hintfree}}, as an ablation study, we re-introduced the full hint-rich prompt during the SFT phase using the \hyperref[ver:teacher_withhints]{T\ref*{ver:teacher_withhints}} teacher annotations. The hypothesis was that providing vulnerability context again (CVE descriptions, changed lines) inside the prompts (not only in the target responses) during supervised learning, just like in \hyperref[ver:sft_hints]{S\ref*{ver:sft_hints}}, might help the model develop more stable reasoning patterns, even though GRPO evaluation would still use hint-free prompts. This version used the function-level deduplicated dataset (\hyperref[ver:data_func]{D\ref*{ver:data_func}}).
 
 This had the desired effect, as can be seen in table \ref{tab:combined_results}, where the parsability of \hyperref[ver:sft_hints_ablation]{S\ref*{ver:sft_hints_ablation}} models is almost back to the level of \hyperref[ver:sft_hints]{S\ref*{ver:sft_hints}}.
 
-\sftversion{Version 5 (latest semester 4, just for reference): SFT with Hints with less commit messages (\hyperref[ver:teacher_withhints_drop_commit_msg]{T\ref*{ver:teacher_withhints_drop_commit_msg}})}{ver:sft_hints_drop_commit_msg}
+\sftversion{SFT with Hints with less commit messages (\hyperref[ver:teacher_withhints_drop_commit_msg]{T\ref*{ver:teacher_withhints_drop_commit_msg}})}{ver:sft_hints_drop_commit_msg}
 This version pairs the SFT training with the refined teacher annotations from \hyperref[ver:teacher_withhints_drop_commit_msg]{T\ref*{ver:teacher_withhints_drop_commit_msg}}, which drop the commit message when a CVE description is already present. The motivation was that traces from the previous teacher version showed the model spending a disproportionate amount of reasoning on paraphrasing the commit message rather than analysing the code, potentially degrading the quality of the SFT learning signal.
 
 \begin{figure}[H]
@@ -588,7 +588,7 @@ This group-relative advantage indicates whether a response is better ($A_i > 0$)
 \subsubsection{Reward Function}
 The reward function implements a discrete structure based on classification accuracy and vulnerable line localization. Over the course of our experiments, we evaluated these configurations:
 
-\grpoversion{Version 1: 4-Tier Reward Structure}{ver:grpo_4tier}
+\grpoversion{4-Tier Reward Structure}{ver:grpo_4tier}
 This initial reward configuration scored both vulnerable and patched samples for line localization: vulnerable samples were evaluated against their ground truth \texttt{deleted\_lines}, while patched samples were scored against their \texttt{added\_lines}. The rollout temperature was set to 1.0 for maximum exploration.
 \begin{itemize}
 \item \textbf{Full reward (1.0):} Correct classification and $\geq$50\% of important lines correctly identified
@@ -598,7 +598,7 @@ This initial reward configuration scored both vulnerable and patched samples for
 \item \textbf{Zero reward (0.0):} Invalid response format (malformed JSON, incomplete output)
 \end{itemize}
 
-\grpoversion{Version 2: 5-Tier Reward Structure}{ver:grpo_5tier}
+\grpoversion{5-Tier Reward Structure}{ver:grpo_5tier}
 To reduce the number of unparsable responses (where the model failed to output valid JSON) and reward high-precision localization, we tested an expanded 5-tier system. Like \hyperref[ver:grpo_4tier]{G\ref*{ver:grpo_4tier}}, this version scored both vulnerable and patched samples for line localization. The rollout temperature was reduced to 0.975. Additionally, the SFT checkpoint (\hyperref[ver:sft_hints_ablation]{S\ref*{ver:sft_hints_ablation}}) used for this run was trained with hints re-introduced in the prompts (\hyperref[ver:teacher_withhints]{T\ref*{ver:teacher_withhints}}), in order to see if not using hints in the prompts during SFT caused the increase of the number of unparsable responses in \vcode{ver:data_func}{ver:teacher_hintfree}{ver:sft_hintfree}{ver:grpo_4tier} and \vcodeSFT{ver:data_func}{ver:teacher_hintfree}{ver:sft_hintfree}, compared to \vcodeSFT{ver:data_commit}{ver:teacher_base}{ver:sft_hints}.
 \begin{itemize}
 \item \textbf{High-Precision reward (1.25):} Correct classification and $\geq$75\% of important lines identified
@@ -609,8 +609,7 @@ To reduce the number of unparsable responses (where the model failed to output v
 \item \textbf{Zero reward (0.0):} Invalid response format (malformed JSON, incomplete output)
 \end{itemize}
 
-\grpoversion{Version 3: Adjusted 4-Tier Reward Structure with Data Quality Guards}{ver:grpo_4tier_improved}
-
+\grpoversion{Adjusted 4-Tier Reward Structure with Data Quality Guards}{ver:grpo_4tier_improved}
 
 Analysis of training rollouts from the \hyperref[ver:grpo_5tier]{G\ref*{ver:grpo_5tier}} run revealed that the model had learned to ``spray'' a large number of predicted lines, particularly on patched samples where the ground truth \texttt{added\_lines} are logically uninferable from the code alone. The 5-tier structure, with its 1.25 high-precision tier, inadvertently incentivised this behaviour by rewarding models that guessed many lines (increasing the chance of hitting $\geq$75\% overlap). Furthermore, samples with an unusually large number of ground truth lines (e.g., 100+ changed lines, representing extensive refactoring rather than targeted security patches) introduced noise into the line localization signal.
 
@@ -630,6 +629,7 @@ The \textbf{GT line capping} guard zeroes out the ground truth lines for trainin
 \subsubsection{GRPO Training Runs}
 
 All GRPO runs shared the following common configuration: learning rate $1 \times 10^{-6}$, training batch size of 60 prompts per iteration, mini-batch size 48, micro-batch size 1 per GPU, max context of 40,960 tokens (28,680 prompt + 12,279 response), FSDP2 with parameter and optimizer offload across 3 H100 GPUs, and KL coefficient $\beta = 0$ following recent research showing that KL penalties are not essential for GRPO-style training \cite{dapo, drgrpo}. The rollout backend was SGLang \cite{sglang} with Top-P 0.95 and Top-K 20, and all runs used $G=16$ generations per prompt. The full deduplicated dataset (\hyperref[ver:data_func]{D\ref*{ver:data_func}}, 24,440 training samples, 1,286 validation samples) was used for all runs. The three runs mainly differed in their SFT starting checkpoint, reward version, and rollout temperature.
+
 \paragraph{Run 1: 4-Tier Rewards, Hint-Free SFT Base}
 This run used the full deduplicated dataset (\hyperref[ver:data_func]{D\ref*{ver:data_func}}, 24,440 training samples, 1,286 validation samples) with hint-free prompts for both SFT and GRPO. Starting from the \hyperref[ver:sft_hintfree]{S\ref*{ver:sft_hintfree}} checkpoint, the \hyperref[ver:grpo_4tier]{G\ref*{ver:grpo_4tier}} reward structure was used with rollout temperature 1.0.
 
@@ -645,10 +645,10 @@ Figures~\ref{fig:grpo_rewards_mean} and~\ref{fig:grpo_val_acc} show the training
 The validation accuracy during training (Figure~\ref{fig:grpo_val_acc}) shows a similar picture, with Run 2 reflecting the overall higher rewards used, while the best P-C scoring Run 1 has the lowest reward and as such showing lower on the graphic, highlighting the need for the pair-wise evaluation methodology.
 
 \begin{figure}[H]
-\centering
+    \centering
     \includegraphics[width=1\linewidth]{critic_rewards_mean.png}
     \caption{Mean reward across GRPO training steps for all runs}
-\label{fig:grpo_rewards_mean}
+    \label{fig:grpo_rewards_mean}
 \end{figure}
 \begin{figure}[H]
     \centering
@@ -662,7 +662,7 @@ The actor gradient norm and entropy curves (Figures~\ref{fig:grpo_grad_norm} and
 \begin{figure}[H]
     \centering
     \includegraphics[width=1\linewidth]{GRPO_grad_norm.png}
-    \caption{Actor gradient norm during GRPO training. All runs remain stable below 0.2, with occasional isolated spikes}
+    \caption{Actor gradient norm during GRPO training\iffalse All runs remain stable below 0.2, with occasional isolated spikes\fi}
     \label{fig:grpo_grad_norm}
 \end{figure}
 \begin{figure}[H]
@@ -673,7 +673,6 @@ The actor gradient norm and entropy curves (Figures~\ref{fig:grpo_grad_norm} and
 \end{figure}
 
 \section{Evaluation}
-
 Evaluation was conducted on a combined test set consisting of:
 \begin{itemize}
 \item \textbf{PrimeVul test set:} 407 vulnerability pairs (814 samples)
@@ -686,7 +685,7 @@ All models from the current iteration were evaluated using the training prompt f
 
 \section{Results}
 
-\paragraph{Pair-wise Metrics}
+\subsection{Pair-wise Metrics}
 The pair-wise metrics measure the model's ability to correctly classify both samples in a vulnerability pair (vulnerable function + patched function):
 \begin{itemize}
   \item \textbf{P-C (Pair-Correct) $\uparrow$}: Both samples correctly classified
@@ -719,14 +718,14 @@ For models evaluated across multiple runs, we report the peak metric alongside t
 \vcodeBase{ver:data_func}{ver:teacher_hintfree} Qwen3-4B& 0.6 & 52.57 (52.23 $\pm$ 0.67) & 52.20 (51.92 $\pm$ 0.55) & 20.68 (20.27 $\pm$ 0.83) & 30.92 (31.13 $\pm$ 0.41) & 32.91 (32.70 $\pm$ 0.41) & 15.46 (15.88 $\pm$ 0.83) & 1923/1940 \\
 \vcodeBase{ver:data_func}{ver:teacher_hintfree} Qwen3-32B (Teacher) & 0.6 & 54.22 (54.47 $\pm$ 0.49) & 59.31 (59.65 $\pm$ 0.68) & 22.39 (22.39 $\pm$ 0.00) & 44.47 (45.00 $\pm$ 1.04) & 19.16 (19.21 $\pm$ 0.10) & 13.95 (13.38 $\pm$ 1.14) & 1927/1940 \\
 \midrule
-\vcodeSFT{ver:data_commit}{ver:teacher_base}{ver:sft_hints} SFT Qwen3-4B (sft_qwen3_4b_before_OOB_gts_fix)& 0.6 & 54.87 & 58.23 & 25.51 & 37.47 & 20.57 & 16.43 & 1815/1876 \\
-\vcodeSFT{ver:data_func}{ver:teacher_hintfree}{ver:sft_hintfree} SFT Qwen3-4B (sft_qwen3_4b_after_dedupandpairidfix_multitemp) & 0.6 & 51.23 (50.40 $\pm$ 1.65) & 41.71 (41.47 $\pm$ 0.48) & 23.25 (22.30 $\pm$ 1.90) & 11.96 (12.86 $\pm$ 1.81) & 44.48 (43.66 $\pm$ 1.65) & 20.29 (21.16 $\pm$ 1.74) & 1696/1940 \\
-\vcodeSFT{ver:data_func}{ver:teacher_withhints}{ver:sft_hints_ablation} sft_qwen3_4b_newrewards_backtoSFThints_butnoGRPOhints_afterdedupandidfix_multitemp & 0.6 & 54.45 (54.33 $\pm$ 0.48) & 59.95 (59.89 $\pm$ 0.74) & 23.12 (23.03 $\pm$ 0.19) & 45.10 (44.93 $\pm$ 0.89) & 17.88 (17.55 $\pm$ 0.54) & 13.89 (14.47 $\pm$ 1.20) & 1842/1940 \\
-\vcodeSFT{ver:data_func}{ver:teacher_withhints_drop_commit_msg}{ver:sft_hints_drop_commit_msg} sft_qwen3_4b & 0.6 & 54.01 (53.58 $\pm$ 1.07) & 57.92 (57.39 $\pm$ 1.23) & 24.28 (23.05 $\pm$ 2.04) & 39.18 (39.73 $\pm$ 1.59) & 20.86 (21.65 $\pm$ 1.82) & 15.67 (15.55 $\pm$ 2.40) & 1870/1940 \\
-\vcode{ver:data_func}{ver:teacher_hintfree}{ver:sft_hintfree}{ver:grpo_4tier} grpo_qwen3_4b_verl_after_dedupandpairidfix_multitemp & 0.6 & 56.11 (53.37 $\pm$ 4.15) & 49.49 (46.84 $\pm$ 4.20) & 28.38 (25.78 $\pm$ 4.81) & 13.92 (14.60 $\pm$ 1.96) & 40.56 (40.06 $\pm$ 2.65) & 17.13 (19.54 $\pm$ 4.95) & 1693/1940 \\
-\vcode{ver:data_func}{ver:teacher_withhints}{ver:sft_hints_ablation}{ver:grpo_5tier} grpo_qwen3_4b_verl_newrewards_backtoSFThints_butnoGRPOhints_afterdedupandidfix_multitemp & 0.6 & 54.09 (53.62 $\pm$ 1.59) & 58.11 (58.16 $\pm$ 1.08) & 24.60 (22.82 $\pm$ 3.48) & 39.14 (41.58 $\pm$ 4.17) & 19.79 (19.88 $\pm$ 1.26) & 16.44 (15.70 $\pm$ 1.37) & 1856/1940 \\
-\vcode{ver:data_func}{ver:teacher_withhints_drop_commit_msg}{ver:sft_hints_drop_commit_msg}{ver:grpo_4tier_improved} grpo_qwen3_4b_verl_step180 & 0.6 & 54.70 & 58.51 & 25.33 & 38.65 & 20.59 & 15.41 & 1872/1940 \\
-\vcode{ver:data_func}{ver:teacher_withhints_drop_commit_msg}{ver:sft_hints_drop_commit_msg}{ver:grpo_4tier_improved} grpo_qwen3_4b_verl_step407 & 0.6 & 55.57 (54.18 $\pm$ 2.89) & 58.37 (56.99 $\pm$ 2.72) & 24.25 (23.68 $\pm$ 1.55) & 38.09 (37.09 $\pm$ 2.12) & 24.58 (23.81 $\pm$ 2.34) & 13.06 (15.39 $\pm$ 4.21) & 1875/1940 \\
+\vcodeSFT{ver:data_commit}{ver:teacher_base}{ver:sft_hints} SFT Qwen3-4B& 0.6 & 54.87 & 58.23 & 25.51 & 37.47 & 20.57 & 16.43 & 1815/1876 \\
+\vcodeSFT{ver:data_func}{ver:teacher_hintfree}{ver:sft_hintfree} SFT Qwen3-4B & 0.6 & 51.23 (50.40 $\pm$ 1.65) & 41.71 (41.47 $\pm$ 0.48) & 23.25 (22.30 $\pm$ 1.90) & 11.96 (12.86 $\pm$ 1.81) & 44.48 (43.66 $\pm$ 1.65) & 20.29 (21.16 $\pm$ 1.74) & 1696/1940 \\
+\vcodeSFT{ver:data_func}{ver:teacher_withhints}{ver:sft_hints_ablation} SFT Qwen3-4B & 0.6 & 54.45 (54.33 $\pm$ 0.48) & 59.95 (59.89 $\pm$ 0.74) & 23.12 (23.03 $\pm$ 0.19) & 45.10 (44.93 $\pm$ 0.89) & 17.88 (17.55 $\pm$ 0.54) & 13.89 (14.47 $\pm$ 1.20) & 1842/1940 \\
+\vcodeSFT{ver:data_func}{ver:teacher_withhints_drop_commit_msg}{ver:sft_hints_drop_commit_msg} SFT Qwen3-4B & 0.6 & 54.01 (53.58 $\pm$ 1.07) & 57.92 (57.39 $\pm$ 1.23) & 24.28 (23.05 $\pm$ 2.04) & 39.18 (39.73 $\pm$ 1.59) & 20.86 (21.65 $\pm$ 1.82) & 15.67 (15.55 $\pm$ 2.40) & 1870/1940 \\
+\vcode{ver:data_func}{ver:teacher_hintfree}{ver:sft_hintfree}{ver:grpo_4tier} GRPO Qwen3-4B & 0.6 & 56.11 (53.37 $\pm$ 4.15) & 49.49 (46.84 $\pm$ 4.20) & 28.38 (25.78 $\pm$ 4.81) & 13.92 (14.60 $\pm$ 1.96) & 40.56 (40.06 $\pm$ 2.65) & 17.13 (19.54 $\pm$ 4.95) & 1693/1940 \\
+\vcode{ver:data_func}{ver:teacher_withhints}{ver:sft_hints_ablation}{ver:grpo_5tier} GRPO Qwen3-4B & 0.6 & 54.09 (53.62 $\pm$ 1.59) & 58.11 (58.16 $\pm$ 1.08) & 24.60 (22.82 $\pm$ 3.48) & 39.14 (41.58 $\pm$ 4.17) & 19.79 (19.88 $\pm$ 1.26) & 16.44 (15.70 $\pm$ 1.37) & 1856/1940 \\
+\vcode{ver:data_func}{ver:teacher_withhints_drop_commit_msg}{ver:sft_hints_drop_commit_msg}{ver:grpo_4tier_improved} GRPO Qwen3-4B (step 180) & 0.6 & 54.70 & 58.51 & 25.33 & 38.65 & 20.59 & 15.41 & 1872/1940 \\
+\vcode{ver:data_func}{ver:teacher_withhints_drop_commit_msg}{ver:sft_hints_drop_commit_msg}{ver:grpo_4tier_improved} GRPO Qwen3-4B (step 407) & 0.6 & 55.57 (54.18 $\pm$ 2.89) & 58.37 (56.99 $\pm$ 2.72) & 24.25 (23.68 $\pm$ 1.55) & 38.09 (37.09 $\pm$ 2.12) & 24.58 (23.81 $\pm$ 2.34) & 13.06 (15.39 $\pm$ 4.21) & 1875/1940 \\
 \midrule
 \multicolumn{9}{c}{\textbf{std\_cls Prompt Format (Historical Comparison)}} \\
 \midrule
@@ -760,14 +759,14 @@ To establish a clear point of comparison against the original PrimeVul benchmark
 \vcodeBase{ver:data_func}{ver:teacher_hintfree} Qwen3-4B& 0.6 & 51.66 (51.90 $\pm$ 0.48) & 50.42 (50.39 $\pm$ 0.05) & 19.80 (19.73 $\pm$ 0.14) & 28.87 (28.94 $\pm$ 0.13) & 34.36 (35.40 $\pm$ 2.08) & 16.94 (15.90 $\pm$ 2.07) & 842/848 \\
 \vcodeBase{ver:data_func}{ver:teacher_hintfree} Qwen3-32B (Teacher) & 0.6 & 54.03 (53.53 $\pm$ 1.01) & 58.69 (58.37 $\pm$ 0.64) & 21.19 (20.59 $\pm$ 1.19) & 44.28 (44.76 $\pm$ 0.95) & 21.66 (21.19 $\pm$ 0.95) & 12.85 (13.45 $\pm$ 1.19) & 842/848 \\
 \midrule
-\vcodeSFT{ver:data_commit}{ver:teacher_base}{ver:sft_hints} SFT Qwen3-4B (sft_qwen3_4b_before_OOB_gts_fix)& 0.6 & 56.03 & 58.90 & 26.17 & 36.12 & 23.03 & 14.65 & 787/814 \\
-\vcodeSFT{ver:data_func}{ver:teacher_hintfree}{ver:sft_hintfree} SFT Qwen3-4B (sft_qwen3_4b_after_dedupandpairidfix_multitemp) & 0.6 & 50.47 (49.96 $\pm$ 1.02) & 39.27 (39.70 $\pm$ 0.85) & 23.17 (21.45 $\pm$ 3.42) & 10.06 (11.92 $\pm$ 3.73) & 46.34 (45.74 $\pm$ 1.20) & 20.42 (20.87 $\pm$ 0.88) & 743/848 \\
-\vcodeSFT{ver:data_func}{ver:teacher_withhints}{ver:sft_hints_ablation} sft_qwen3_4b_newrewards_backtoSFThints_butnoGRPOhints_afterdedupandidfix_multitemp & 0.6 & 54.48 (53.75 $\pm$ 1.95) & 59.16 (58.87 $\pm$ 0.80) & 23.97 (22.41 $\pm$ 4.54) & 42.60 (44.01 $\pm$ 3.77) & 18.62 (18.92 $\pm$ 0.54) & 14.79 (14.64 $\pm$ 0.92) & 813/848 \\
-\vcodeSFT{ver:data_func}{ver:teacher_withhints_drop_commit_msg}{ver:sft_hints_drop_commit_msg} sft_qwen3_4b & 0.6 & 53.83 (53.29 $\pm$ 1.26) & 56.18 (56.20 $\pm$ 1.27) & 23.94 (22.15 $\pm$ 3.73) & 34.91 (37.92 $\pm$ 4.73) & 25.18 (24.51 $\pm$ 2.13) & 15.96 (15.39 $\pm$ 1.06) & 821/848 \\
-\vcode{ver:data_func}{ver:teacher_hintfree}{ver:sft_hintfree}{ver:grpo_4tier} grpo_qwen3_4b_verl_after_dedupandpairidfix_multitemp & 0.6 & 55.44 (51.34 $\pm$ 6.87) & 48.01 (43.88 $\pm$ 6.96) & 25.93 (22.74 $\pm$ 6.39) & 15.31 (14.88 $\pm$ 2.26) & 44.06 (42.42 $\pm$ 8.74) & 14.68 (19.94 $\pm$ 11.77) & 734/848 \\
-\vcode{ver:data_func}{ver:teacher_withhints}{ver:sft_hints_ablation}{ver:grpo_5tier} grpo_qwen3_4b_verl_newrewards_backtoSFThints_butnoGRPOhints_afterdedupandidfix_multitemp & 0.6 & 53.50 (51.44 $\pm$ 3.32) & 57.52 (55.72 $\pm$ 3.32) & 23.40 (20.46 $\pm$ 6.11) & 39.44 (40.65 $\pm$ 3.83) & 20.61 (21.46 $\pm$ 5.39) & 16.53 (17.41 $\pm$ 2.89) & 813/848 \\
-\vcode{ver:data_func}{ver:teacher_withhints_drop_commit_msg}{ver:sft_hints_drop_commit_msg}{ver:grpo_4tier_improved} grpo_qwen3_4b_verl_step180 & 0.6 & 52.99 & 56.85 & 23.03 & 38.98 & 21.51 & 16.45 & 817/848 \\
-\vcode{ver:data_func}{ver:teacher_withhints_drop_commit_msg}{ver:sft_hints_drop_commit_msg}{ver:grpo_4tier_improved} grpo_qwen3_4b_verl_step407 & 0.6 & 53.97 (52.97 $\pm$ 4.05) & 55.86 (55.28 $\pm$ 3.86) & 23.23 (21.99 $\pm$ 2.97) & 34.84 (36.26 $\pm$ 4.44) & 26.01 (25.45 $\pm$ 4.62) & 15.90 (16.29 $\pm$ 4.58) & 817/848 \\
+\vcodeSFT{ver:data_commit}{ver:teacher_base}{ver:sft_hints} SFT Qwen3-4B& 0.6 & 56.03 & 58.90 & 26.17 & 36.12 & 23.03 & 14.65 & 787/814 \\
+\vcodeSFT{ver:data_func}{ver:teacher_hintfree}{ver:sft_hintfree} SFT Qwen3-4B & 0.6 & 50.47 (49.96 $\pm$ 1.02) & 39.27 (39.70 $\pm$ 0.85) & 23.17 (21.45 $\pm$ 3.42) & 10.06 (11.92 $\pm$ 3.73) & 46.34 (45.74 $\pm$ 1.20) & 20.42 (20.87 $\pm$ 0.88) & 743/848 \\
+\vcodeSFT{ver:data_func}{ver:teacher_withhints}{ver:sft_hints_ablation} SFT Qwen3-4B & 0.6 & 54.48 (53.75 $\pm$ 1.95) & 59.16 (58.87 $\pm$ 0.80) & 23.97 (22.41 $\pm$ 4.54) & 42.60 (44.01 $\pm$ 3.77) & 18.62 (18.92 $\pm$ 0.54) & 14.79 (14.64 $\pm$ 0.92) & 813/848 \\
+\vcodeSFT{ver:data_func}{ver:teacher_withhints_drop_commit_msg}{ver:sft_hints_drop_commit_msg} SFT Qwen3-4B & 0.6 & 53.83 (53.29 $\pm$ 1.26) & 56.18 (56.20 $\pm$ 1.27) & 23.94 (22.15 $\pm$ 3.73) & 34.91 (37.92 $\pm$ 4.73) & 25.18 (24.51 $\pm$ 2.13) & 15.96 (15.39 $\pm$ 1.06) & 821/848 \\
+\vcode{ver:data_func}{ver:teacher_hintfree}{ver:sft_hintfree}{ver:grpo_4tier} GRPO Qwen3-4B & 0.6 & 55.44 (51.34 $\pm$ 6.87) & 48.01 (43.88 $\pm$ 6.96) & 25.93 (22.74 $\pm$ 6.39) & 15.31 (14.88 $\pm$ 2.26) & 44.06 (42.42 $\pm$ 8.74) & 14.68 (19.94 $\pm$ 11.77) & 734/848 \\
+\vcode{ver:data_func}{ver:teacher_withhints}{ver:sft_hints_ablation}{ver:grpo_5tier} GRPO Qwen3-4B & 0.6 & 53.50 (51.44 $\pm$ 3.32) & 57.52 (55.72 $\pm$ 3.32) & 23.40 (20.46 $\pm$ 6.11) & 39.44 (40.65 $\pm$ 3.83) & 20.61 (21.46 $\pm$ 5.39) & 16.53 (17.41 $\pm$ 2.89) & 813/848 \\
+\vcode{ver:data_func}{ver:teacher_withhints_drop_commit_msg}{ver:sft_hints_drop_commit_msg}{ver:grpo_4tier_improved} GRPO Qwen3-4B (step 180) & 0.6 & 52.99 & 56.85 & 23.03 & 38.98 & 21.51 & 16.45 & 817/848 \\
+\vcode{ver:data_func}{ver:teacher_withhints_drop_commit_msg}{ver:sft_hints_drop_commit_msg}{ver:grpo_4tier_improved} GRPO Qwen3-4B (step 407) & 0.6 & 53.97 (52.97 $\pm$ 4.05) & 55.86 (55.28 $\pm$ 3.86) & 23.23 (21.99 $\pm$ 2.97) & 34.84 (36.26 $\pm$ 4.44) & 26.01 (25.45 $\pm$ 4.62) & 15.90 (16.29 $\pm$ 4.58) & 817/848 \\
 \midrule
 \multicolumn{9}{c}{\textbf{std\_cls Prompt Format (Historical Comparison)}} \\
 \midrule
@@ -784,11 +783,9 @@ PrimeVul GPT-4 (Reported) & - & - & - & 12.94 & 54.26 & 24.47 & 8.33 & N/A \\
 \end{minipage}
 \end{table}
 
-\subsection{Analysis}
-\label{sec:analysis}
+\subsection{Analysis}\label{sec:analysis}
 
 The results reveal a clear progression in discriminative performance across iterations of our pipeline, with the Pair-wise Correct (P-C) metric serving as the primary indicator of improvement.
-
 
 \subsubsection{Overall Progression}
 
@@ -811,7 +808,7 @@ Run~3 (\vcode{ver:data_func}{ver:teacher_withhints_drop_commit_msg}{ver:sft_hint
 
 \subsubsection{Other Observations}
 
-The teacher model (Qwen3-32B) achieves 22.39\% P-C on the combined set and 21.19\% on PrimeVul, confirming that the student model's fine-tuned variants genuinely surpass the teacher's zero-shot capability. Notably, the teacher exhibits a strong vulnerability-prediction bias (P-V of 44.47\%), which the SFT process partly transfers to the student: all hints-in-SFT models show elevated P-V, while the hint-free SFT model shows the opposite bias (high P-B). The GRPO stage modulates these biases further, with hint-free GRPO models showing the most favourable P-C/P-B trade-off.
+The teacher model (Qwen3-32B) achieves 22.39\% P-C on the combined set and 21.19\% on PrimeVul, confirming that the student model's fine-tuned variants genuinely surpass the teacher's zero-shot capability. Interestingly, the SFT prompt format shapes the student's default behaviour at evaluation time (when no hints are present): all hints-in-SFT models, trained with explicit vulnerability cues such as CVE descriptions and changed line numbers, become reliant on those cues and over-predict vulnerabilities when they are absent (elevated P-V), while the hint-free SFT model, never exposed to metadata context during training, becomes conservative and defaults to benign predictions (high P-B). The GRPO stage modulates these biases further, with hint-free GRPO models showing the most favourable P-C/P-B trade-off.
 
 Across the historical comparison rows (std\_cls prompt), the pattern is consistent: base models struggle significantly (Qwen3-4B achieves only 6.20\% P-C with std\_cls, defaulting to labelling everything as benign), while SFT models perform comparably regardless of prompt format ($\sim$26\% P-C), demonstrating that fine-tuning teaches the model to engage with the vulnerability detection task regardless of prompt style.
 
@@ -941,7 +938,7 @@ Our consolidated dataset pipeline merged three complementary vulnerability sourc
 
 The best-performing model, a GRPO-trained Qwen3-4B using the 4-tier reward structure with hint-free prompts, achieved a Pair-wise Correct score of 28.38\% on the combined test set and 25.93\% on the PrimeVul test split, the latter representing a 100\% relative improvement over GPT-4's reported performance on PrimeVul (12.94\%) and a 39\% improvement over our initial LoRA baseline (18.67\%). This GRPO model also surpasses all SFT-only variants, the best of which reaches 25.51\% P-C, confirming that reinforcement learning provides a measurable gain beyond supervised fine-tuning alone. Our experiments also revealed important design trade-offs: hint-free SFT training produces models with stronger discrimination but lower output parsability, while hints-in-SFT models exhibit better format compliance but inherit the teacher's vulnerability-prediction bias. The GRPO stage consistently improves P-C over SFT baselines, though run-to-run variance remains notable, and iterating on the reward structure proved important for controlling undesirable behaviours such as line prediction spraying.
 
-However, all configurations still show significant inconsistencies, like high evaluation variance across temperatures, sensitivity to reward structure design, and a persistent tension between parsability and discrimination. The overall P-C scores, while substantially improved over baselines, are far from reliable real-world deployment, underscoring that considerable room for improvement exists in both training methodology and evaluation robustness.
+However, all configurations still show significant inconsistencies, like high evaluation variance across temperatures, sensitivity to reward structure design, and a trade-off between output parsability and discrimination capability. The overall P-C scores, while substantially improved over baselines, are still too low for reliable real-world deployment, underscoring that considerable room for improvement exists in both training methodology and evaluation robustness.
 
 Several directions remain for future work:
 \begin{itemize}
