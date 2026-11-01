@@ -1,4 +1,4 @@
-Semester 3 report [R3_Report.pdf](https://github.com/Andrefty/MS_Research/blob/32937041bde2c362c28413252a475de7448e0bae/R3_Report.pdf)
+[Complete thesis, BRAIT 2026 short paper and poster](https://github.com/Andrefty/MS_Research/tree/main/Documentation_folder)
 
 To be used with my PrimeVul fork
 ```
