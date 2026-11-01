@@ -175,6 +175,7 @@ if __name__ == "__main__":
     parser.add_argument("--desc", action="store_true", help="Sort in descending order (useful for sorting by best metric first)")
     parser.add_argument("--limit", type=int, default=None, help="Limit the number of results to show")
     parser.add_argument("--json", action="store_true", help="Output results in JSON format")
+    parser.add_argument("--latex", action="store_true", help="Output results in LaTeX table row format")
     parser.add_argument("--output", type=str, default=None, help="File path to save the output")
     parser.add_argument("--aggregate", action="store_true", help="Aggregate metrics across runs of the same model series")
     
@@ -190,6 +191,20 @@ if __name__ == "__main__":
         
     results = get_metrics(args.base_dir, run_type=types, filter_str=args.filter, dataset=args.dataset)
     
+    def format_val(val):
+        """Truncate to 2 decimal places without rounding"""
+        if val is None: return "0.00"
+        return f"{int(val * 10000) / 100.0:.2f}"
+
+    def get_vcode(series_name):
+        lower_name = series_name.lower()
+        if lower_name.startswith("grpo"):
+            return "\\vcode{ver:data}{ver:teacher}{ver:sft}{ver:grpo}"
+        elif "base" in lower_name:
+            return "\\vcodeBase{ver:data}{ver:teacher}"
+        else:
+            return "\\vcodeSFT{ver:data}{ver:teacher}{ver:sft}"
+
     if args.aggregate:
         agg_results = aggregate_metrics(results)
         if args.sort:
@@ -206,6 +221,37 @@ if __name__ == "__main__":
                 print(f"Aggregated results saved to {args.output}")
             else:
                 print(output_str)
+        elif args.latex:
+            for agg in agg_results:
+                series = agg.get("Series", "")
+                temp = agg.get("Temp", "default")
+                temp_str = temp.replace("temp0p", "0.") if "temp0p" in temp else "-"
+                
+                # Find the parseable for the run with max P-C
+                runs_in_agg = [r for r in results if r['Run'] in agg['Runs']]
+                best_run = max(runs_in_agg, key=lambda x: x.get('P-C', 0)) if runs_in_agg else {}
+                
+                # Format metrics: value_of_best_run (mean $\pm$ max_spread)
+                acc = f"{format_val(best_run.get('Acc', 0))} ({format_val(agg.get('Acc_mean', 0))} $\\pm$ {format_val(agg.get('Acc_max_spread', 0))})"
+                f1 = f"{format_val(best_run.get('F1', 0))} ({format_val(agg.get('F1_mean', 0))} $\\pm$ {format_val(agg.get('F1_max_spread', 0))})"
+                pc = f"{format_val(best_run.get('P-C', 0))} ({format_val(agg.get('P-C_mean', 0))} $\\pm$ {format_val(agg.get('P-C_max_spread', 0))})"
+                pv = f"{format_val(best_run.get('P-V', 0))} ({format_val(agg.get('P-V_mean', 0))} $\\pm$ {format_val(agg.get('P-V_max_spread', 0))})"
+                pb = f"{format_val(best_run.get('P-B', 0))} ({format_val(agg.get('P-B_mean', 0))} $\\pm$ {format_val(agg.get('P-B_max_spread', 0))})"
+                pr = f"{format_val(best_run.get('P-R', 0))} ({format_val(agg.get('P-R_mean', 0))} $\\pm$ {format_val(agg.get('P-R_max_spread', 0))})"
+                
+                parsable = best_run.get('Parseable', "N/A")
+                
+                # For single runs where spread is exactly 0.0, print without spread
+                if agg.get("RunCount", 1) == 1:
+                    acc = format_val(best_run.get('Acc', 0))
+                    f1 = format_val(best_run.get('F1', 0))
+                    pc = format_val(best_run.get('P-C', 0))
+                    pv = format_val(best_run.get('P-V', 0))
+                    pb = format_val(best_run.get('P-B', 0))
+                    pr = format_val(best_run.get('P-R', 0))
+                
+                vcode = get_vcode(series)
+                print(f"{vcode} {series} & {temp_str} & {acc} & {f1} & {pc} & {pv} & {pb} & {pr} & {parsable} \\\\")
         else:
             # simple print of aggregated
             print(json.dumps(agg_results, indent=2))
@@ -232,5 +278,21 @@ if __name__ == "__main__":
                 print(f"Results saved to {args.output}")
             else:
                 print(output_str)
+        elif args.latex:
+            for r in results:
+                series = r.get("Run", "")
+                temp = r.get("Temp", "default")
+                temp_str = temp.replace("temp0p", "0.") if "temp0p" in temp else "-"
+                
+                acc = format_val(r.get('Acc', 0))
+                f1 = format_val(r.get('F1', 0))
+                pc = format_val(r.get('P-C', 0))
+                pv = format_val(r.get('P-V', 0))
+                pb = format_val(r.get('P-B', 0))
+                pr = format_val(r.get('P-R', 0))
+                parsable = r.get('Parseable', 'N/A')
+                
+                vcode = get_vcode(series)
+                print(f"{vcode} {series} & {temp_str} & {acc} & {f1} & {pc} & {pv} & {pb} & {pr} & {parsable} \\\\")
         else:
             print_table(results, sort_by=None, limit=None, reverse=False)

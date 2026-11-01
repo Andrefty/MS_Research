@@ -1,0 +1,191 @@
+% This is a copy of neurips_2023.tex
+% (https://neurips.cc/Conferences/2023/PaperInformation/StyleFiles)
+% adapted for 
+% Best Romanian AI Thesis Awards 2026 
+%
+% last revision: February 2026
+\documentclass{article}
+
+% if you need to pass options to natbib, use, e.g.:
+%     \PassOptionsToPackage{numbers, compress}{natbib}
+% before loading best_roai_thesis_awards_2026
+
+% ready for submission
+\usepackage{best_roai_thesis_awards_2026}
+
+% to compile a final version
+% \usepackage[final]{best_roai_thesis_awards_2026}
+
+\usepackage[utf8]{inputenc} % allow utf-8 input
+\usepackage[T1]{fontenc}    % use 8-bit T1 fonts
+\usepackage{hyperref}       % hyperlinks
+\usepackage{url}            % simple URL typesetting
+\usepackage{booktabs}       % professional-quality tables
+\usepackage{amsfonts}       % blackboard math symbols
+\usepackage{nicefrac}       % compact symbols for 1/2, etc.
+\usepackage{microtype}      % microtypography
+\usepackage{graphicx}       % for \resizebox
+\usepackage{xcolor}         % colors
+\usepackage[numbers]{natbib}
+\usepackage{amsmath}
+
+\newcommand{\eg}{\textit{e}.\textit{g}.}
+
+
+\title{Improving code vulnerability detection using LLMs}
+
+
+\author{%
+  Andrei Tudor F\u{a}rc\u{a}\c{s}anu\iffalse\thanks{GitHub: \url{https://github.com/Andrefty/MS_Research} ~|~ Models \& Data: \url{https://huggingface.co/Andrefty}} \fi \\
+  Department of Computer Science and Engineering\\
+  National University of Science and Technology POLITEHNICA Bucharest\\
+  \texttt{tudor.farcasanu@stud.acs.upb.ro} \\
+  \And
+  Traian Rebedea \\
+  Department of Computer Science and Engineering\\
+  National University of Science and Technology POLITEHNICA Bucharest\\
+  \texttt{traian.rebedea@upb.ro} \\
+}
+
+
+\begin{document}
+
+
+\maketitle
+
+
+\begin{abstract}
+Large Language Models (LLMs) show promise for automated vulnerability detection but struggle to distinguish between vulnerable code and its patched counterpart. This research advances LLM-based vulnerability detection through a multi-stage pipeline combining dataset consolidation, reasoning-augmented fine-tuning, and reinforcement learning. We merge three code vulnerability datasets (PrimeVul, SVEN, SecVulEval) into a new dataset containing 12,912 unique deduplicated functions through a function-level deduplication strategy, then use Qwen3-32B as a teacher model to generate reasoning-augmented training data that teaches the student model not just the classification outcome but the analytical process leading to it. Supervised fine-tuning of Qwen3-4B on this dataset, followed by Group Relative Policy Optimization (GRPO) with a tiered reward structure evaluating both classification accuracy and vulnerable line localization, achieves a Pair-wise Correct score of 28.38\% on a combined benchmark of 970 vulnerability pairs and 25.93\% on the PrimeVul test split, a $\sim$100\% relative improvement over GPT-4's reported performance in PrimeVul \cite{primevul}. The GRPO model also surpasses all SFT-only variants, the best of which reaches 25.51\% P-C, confirming that reinforcement learning provides a measurable gain beyond supervised fine-tuning alone. Our experiments further reveal that hint-free training prompts produce stronger discriminative models at the cost of output parsability, while iterating on the GRPO reward structure proves critical for controlling undesirable behaviours such as line prediction spraying.
+\end{abstract}
+
+\section{Introduction}
+
+The escalating complexity of modern software systems has been paralleled by a surge in security vulnerabilities, making automated detection a critical field of research. While traditional static and dynamic analysis tools have been foundational, they often struggle with high false positive rates or require extensive manual configuration. The advent of Large Language Models (LLMs) has introduced a new paradigm, demonstrating a remarkable ability to understand and generate code, which has naturally been extended to vulnerability detection~\cite{vulnllmeval, if_llms_would_just_look}.
+
+Despite their potential, recent work has shown that LLMs often fail to distinguish between vulnerable code and its subtly patched counterpart. The PrimeVul benchmark~\cite{primevul} showed that even GPT-4 achieves only 12.94\% Pair-wise Correct (P-C) score, meaning it correctly classifies both samples in a vulnerability pair less than 13\% of the time. This suggests that models may overfit to superficial textual features rather than grasping the underlying semantic causes of vulnerabilities.
+
+Inspired by knowledge-level enhancement frameworks like Vul-RAG~\cite{vul-rag}, we hypothesize that an LLM's discriminative ability can be significantly improved by fine-tuning it on data that explicitly articulates the reasoning behind a vulnerability's existence and its corresponding fix. We approach this through a multi-stage methodology: consolidating multiple vulnerability datasets, generating reasoning-augmented training data via a teacher model, supervised fine-tuning of a smaller student model, and applying reinforcement learning with targeted reward signals.
+
+\textbf{Main contributions:}
+\begin{itemize}
+    \item A function-level deduplication pipeline that merges three complementary vulnerability datasets into 12,912 unique training functions, recovering thousands of pairs lost by prior commit-level strategies.
+    \item A teacher-student pipeline where Qwen3-32B generates reasoning-augmented annotations through an iteratively refined prompt design that balances metadata richness with preventing reasoning dilution.
+    \item A GRPO training framework with tiered reward structures evaluating both classification and line localization, achieving 28.38\% P-C on a combined benchmark of 970 vulnerability pairs and 25.93\% on the PrimeVul test split, a $\sim$100\% relative improvement over GPT-4 as reported in PrimeVul \cite{primevul}.
+    \item An ablation study across five SFT variants and three GRPO reward configurations, revealing the trade-off between hint-free prompts training (stronger discrimination) and hint-rich prompts training (better output parsability).
+\end{itemize}
+
+\section{Related Work}
+
+\textbf{Vulnerable vs.\ Patched Code Discrimination.} The PrimeVul benchmark~\cite{primevul} introduced paired vulnerable/fixed functions with pair-wise metrics (P-C, P-V, P-B, P-R) to measure discrimination. Their results showed even GPT-4 struggles to correctly classify both samples in a pair, establishing the key challenge our work addresses.
+
+\textbf{Real-World Vulnerability Analysis.} CyberGym~\cite{cybergym} demonstrates real-world complexity through a large-scale evaluation of 1,507 vulnerabilities, where even top AI agents achieve only 11.9\% success rate in generating proof-of-concept tests, while discovering 35 zero-day vulnerabilities. JitVul~\cite{jitvul} addresses Just-In-Time vulnerability detection, showing that LLM-based agents with reasoning capabilities outperform isolated function-level analysis.
+
+\textbf{Explainability and Foundational Methods.} Recent work on Explainable Vulnerability Detection~\cite{explainable_vuln} using edge-aware graph attention networks bridges black-box predictions and actionable insights. Graph Neural Networks on ASTs and CFGs~\cite{devign}, systems like VulDeePecker~\cite{VulDeePecker_paper} and SySeVR~\cite{SySeVR_paper}, and dataflow-inspired approaches~\cite{deepdfa} provide foundational techniques that inform our understanding of what semantic patterns are critical for detection, suggesting that enhancing LLMs with structured reasoning is a promising direction.
+
+\section{Approach}
+
+Our pipeline consists of four stages: dataset consolidation, teacher annotation, supervised fine-tuning (SFT), and Group Relative Policy Optimization (GRPO).
+
+\subsection{Dataset Consolidation}
+
+We merge three data sources into a unified dataset: PrimeVul (paired vulnerable/patched functions with CVE metadata), SVEN (1,606 manually-verified functions with 94\% claimed label accuracy), and SecVulEval (additional CVE/CWE-linked samples with line-level changes). Our function-level deduplication pipeline groups samples by \texttt{(commit\_id, func\_name)} and applies a three-tier conflict resolution strategy: (1)~identical code hashes are collapsed by source priority (SVEN~$>$~SecVulEval~$>$~PrimeVul) with metadata merging; (2)~different hashes within the same group undergo pairwise resolution based on code similarity, diff size, and file paths; (3)~surviving variants are cross-enriched with missing CVE/CWE metadata from siblings (more details available in main thesis). This recovers thousands of pairs previously lost by commit-level collapsing, yielding \textbf{12,912 unique deduplicated functions} covering 6,208 unique CVEs and 144 CWE categories.
+
+\subsection{Teacher Model Annotation}
+
+We use Qwen3-32B to generate reasoning traces for each sample. The prompt design evolved through five iterations, balancing information density with reasoning trace quality. Key iterations include: (T2)~introducing a JSON output schema with CVE identifiers added to the metadata context; (T3)~unifying the JSON schema to output \textit{important lines} instead of just vulnerable ones, handling both vulnerable and patched samples to also allow scoring for patched samples during GRPO, and adding dynamically truncated commit messages; and (T5)~dropping commit messages when a CVE description is present, after observing the teacher devoting excessive reasoning to paraphrasing metadata rather than analysing code. Each prompt includes line-numbered code and optional ground-truth hints about changed lines, with the target output being a structured JSON containing classification, important line numbers, and a reasoning summary.
+
+\subsection{Supervised Fine-Tuning}
+
+We fine-tune Qwen3-4B using the teacher-generated annotations. Five SFT variants were tested, varying whether hints (CVE context, changed lines) appear in the training prompts. The key finding is a trade-off: \textit{hint-free SFT} (where training prompts contain only raw code despite responses being generated with full context) produces models with stronger discrimination but lower JSON parsability (the model often gets stuck reasoning and fails to output valid JSON), while \textit{hints-in-SFT} models exhibit better format compliance but inherit the teacher's vulnerability-prediction bias. All Qwen3-4B SFT runs use full-parameter fine-tuning with DeepSpeed ZeRO-3~\cite{deepspeed} across 3$\times$H100 GPUs, learning rate $2\times10^{-5}$, and 1 epoch.
+
+\subsection{Group Relative Policy Optimization}
+
+GRPO~\cite{deepseekmath} refines the SFT checkpoint using reinforcement learning without a separate value network. For each prompt, it generates $G{=}16$ candidate responses, computes per-sample rewards, and estimates advantages within each group:
+\begin{equation}
+A_i = \frac{r_i - \text{mean}(\{r_1, \ldots, r_G\})}{\text{std}(\{r_1, \ldots, r_G\})}
+\end{equation}
+
+We tested three reward configurations: (G1)~a 4-tier structure (1.0/0.6/0.3/0.05/0.0) scoring both vulnerable and patched samples; (G2)~a 5-tier structure adding a 1.25 high-precision tier for $\geq$75\% line overlap; and (G3)~an adjusted 4-tier (1.0/0.75/0.3/0.1/0.0) with two data quality guards: a \textit{spray guard} that withholds localization rewards when the model predicts more than 60 lines (set slightly higher than the figures the 99th percentile returned), and \textit{GT line capping} that zeroes out ground truth for outlier samples (99th percentile line count). G3 also disables patched sample scoring, since the model cannot logically deduce which lines were added in a patch. All runs use $\beta{=}0$ (no KL penalty), following recent findings~\cite{dapo, drgrpo}. The three runs also differ in their SFT starting checkpoint and rollout temperature (1.0 for G1, 0.975 for G2 and G3).
+
+\section{Experimental Analysis}
+
+\subsection{Setup}
+
+Evaluation is conducted on a combined test set of 970 vulnerability pairs (1,940 samples): PrimeVul test (407 pairs), PrimeVul validation (354 pairs), and SVEN validation (209 pairs), which weren't used during training. All results are reported at temperature $T{=}0.6$, which generally yielded the best P-C scores across variants. Pair-wise metrics measure the model's ability to correctly classify \textit{both} samples in a pair: P-C$\uparrow$ (both correct), P-V$\downarrow$ (both labeled vulnerable), P-B$\downarrow$ (both labeled benign), P-R$\downarrow$ (labels swapped).
+
+\subsection{Results}
+
+Table~\ref{tab:results} presents the main results. For models evaluated across multiple runs, we report the metrics from the run achieving the best P-C, alongside the P-C average and maximum spread in the format: Best (Avg$\pm$Spread).
+
+\begin{table}[h]
+\centering
+\caption{Evaluation Results. Best P-C per section in \textbf{bold}.}
+\label{tab:results}
+\resizebox{\textwidth}{!}{%
+\begin{tabular}{lccccccc}
+\toprule
+\textbf{Model} & \textbf{Acc$\uparrow$} & \textbf{F1$\uparrow$} & \textbf{P-C(\%)$\uparrow$} & \textbf{P-V(\%)$\downarrow$} & \textbf{P-B(\%)$\downarrow$} & \textbf{P-R(\%)$\downarrow$} & \textbf{Parsable} \\
+\midrule
+\multicolumn{8}{c}{\textbf{Combined Test Set (970 pairs)}} \\
+\midrule
+\multicolumn{8}{l}{\textit{Baselines}} \\
+Qwen3-4B (Base) & 52.57 & 52.20 & 20.68 (20.27$\pm$0.83) & 30.92 & 32.91 & 15.46 & 1923/1940 \\
+Qwen3-32B (Teacher) & 54.22 & 59.31 & 22.39 (22.39 $\pm$ 0.00) & 44.47 & 19.16 & 13.95 & 1927/1940 \\
+\midrule
+\multicolumn{8}{l}{\textit{SFT Models (Qwen3-4B, full fine-tuning)}} \\
+SFT: Hints-in (T2, commit-dedup) & 54.87 & 58.23 & 25.51 & 37.47 & 20.57 & 16.43 & 1815/1876 \\
+SFT: Hint-free (T3) & 51.23 & 41.71 & 23.25 (22.30$\pm$1.90) & 11.96 & 44.48 & 20.29 & 1696/1940 \\
+SFT: Hints re-introduced (T4) & 54.45 & 59.95 & 23.12 (23.03$\pm$0.19) & 45.10 & 17.88 & 13.89 & 1842/1940 \\
+SFT: Refined hints (T5) & 54.01 & 57.92 & 24.28 (23.05$\pm$2.04) & 39.18 & 20.86 & 15.67 & 1870/1940 \\
+\midrule
+\multicolumn{8}{l}{\textit{GRPO Models (Qwen3-4B)}} \\
+GRPO Run 1: 4-tier, hint-free SFT & 56.11 & 49.49 & \textbf{28.38} (25.78$\pm$4.81) & 13.92 & 40.56 & 17.13 & 1693/1940 \\
+GRPO Run 2: 5-tier, hints-in SFT & 54.09 & 58.11 & 24.60 (22.82$\pm$3.48) & 39.14 & 19.79 & 16.44 & 1856/1940 \\
+GRPO Run 3: Adj.\ 4-tier + guards & 55.57 & 58.37 & 24.25 (23.68$\pm$1.55) & 38.09 & 24.58 & 13.06 & 1875/1940 \\
+\midrule
+\multicolumn{8}{c}{\textbf{PrimeVul Test Split Only (407 pairs)}} \\
+\midrule
+PrimeVul GPT-4 (Reported)~\cite{primevul} & -- & -- & 12.94 & 54.26 & 24.47 & 8.33 & N/A \\
+Qwen3-8B LoRA & 52.80 & 42.70 & 18.67 & 14.74 & 52.58 & 14.00 & N/A \\
+GRPO Run 1 (best model) & 55.44 & 48.01 & \textbf{25.93} (22.74$\pm$6.39) & 15.31 & 44.06 & 14.68 & 734/848 \\
+\bottomrule
+\end{tabular}%
+}
+\end{table}
+
+\subsection{Ablation: SFT Hint Configuration}
+
+Among SFT-only models, hint-free training (where prompts contain only raw code, while the teacher response was generated with full context) achieves competitive P-C (23.25\%) but at the cost of the highest P-B (44.48\%) and lowest parsability (1,696/1,940). The model becomes conservative, often failing to complete reasoning within the token limit. Re-introducing hints restores parsability (1,842/1,940) and achieves the highest F1 (59.95\%), but inherits the teacher's vulnerability-prediction bias (P-V of 45.10\%). The final variant with refined teacher annotations (dropping commit messages when CVE descriptions are present) strikes a middle ground: 24.28\% P-C with balanced P-V/P-B and strong parsability (1,870/1,940).
+
+\subsection{Ablation: GRPO Reward Structure}
+
+GRPO Run~1, starting from the hint-free SFT base with the original 4-tier rewards, achieves the highest P-C (28.38\%) but also exhibits the highest variance ($\pm$4.81 spread) and lowest parsability (1,693/1,940). Run~2's 5-tier structure achieved higher absolute rewards during training ($\sim$0.55--0.65 vs.\ $\sim$0.40--0.45 for Run~1), but this did not translate to better discrimination; instead, rollout analysis revealed it incentivised the model to ``spray'' many predicted lines to hit the 75\% overlap threshold. Run~3's data quality guards successfully controlled this behaviour, maintaining excellent parsability ($\sim$1,875/1,940) and the most balanced P-V/P-B distribution, though P-C improvement over its SFT base was modest.
+
+\section{Discussion}
+
+Our best model achieves 28.38\% P-C on the combined test set and 25.93\% on the PrimeVul test split, the latter representing a 100\% relative improvement over GPT-4's reported 12.94\% and a 39\% improvement over our initial LoRA baseline (18.67\%). The GRPO model also surpasses all SFT-only variants, confirming that reinforcement learning provides a measurable gain beyond supervised fine-tuning.
+
+A central finding is the trade-off between discrimination and parsability. The hint-free pipeline produces the strongest discriminative signal by forcing the model to reason from code alone, but at the cost of output stability, with the model frequently failing to finish reasoning and sometimes failing to produce valid JSON. Hints-in-SFT models are more reliable but inherit the teacher's bias toward predicting vulnerabilities (P-V $>$ 40\%). This suggests that the optimal approach may involve hint-free GRPO training with a reward component specifically targeting format compliance.
+
+The teacher model (Qwen3-32B) achieves only 22.39\% P-C, confirming that fine-tuned student models genuinely surpass the teacher's zero-shot capability through the distillation and RL process. Interestingly, the SFT prompt format shapes the student's default behaviour at evaluation time (when no hints are present): hints-in-SFT models, trained with explicit vulnerability cues, become reliant on those cues and over-predict vulnerabilities when they are absent (elevated P-V), while hint-free SFT models, never exposed to metadata context, become conservative and default to benign predictions (high P-B).
+
+The GRPO reward structure proved critical for training dynamics. The 5-tier reward (G2), despite yielding higher absolute training rewards, inadvertently taught the model to exploit the localization component by predicting excessive line numbers. The introduction of spray guards and GT line capping in G3 successfully mitigated this, demonstrating that reward engineering requires careful attention to potential exploitation strategies.
+
+\section{Conclusion}
+
+We demonstrated that reasoning-augmented fine-tuning combined with GRPO reinforcement learning substantially improves vulnerable/patched code discrimination, achieving a 100\% relative improvement over GPT-4 on PrimeVul. Key directions for future work include continuous reward functions for finer gradient signals, integration of static analysis tool outputs into the reward function, newer code-specialised foundation models, and extending beyond isolated functions to repository-level context incorporating call graphs and data-flow information, as motivated by benchmarks like CyberGym~\cite{cybergym} and JitVul~\cite{jitvul}.
+
+\section{Limitations}
+
+Our evaluation relies on the PrimeVul and SVEN benchmarks, which focus on C/C++ functions in open-source projects, limiting generalizability to other languages and proprietary codebases. The 4B-parameter student model may lack capacity for more complex vulnerability patterns. All P-C scores exhibit notable run-to-run variance (up to $\pm$6.39 on PrimeVul), making definitive ranking between configurations difficult. The best model's parsability (1,693/1,940) means approximately 12.7\% of responses are invalid JSON, limiting practical deployment. Finally, our reward function relies on line-level overlap with ground truth, which may not capture semantic correctness of vulnerability localization.
+
+\begin{ack}
+This work was conducted as part of a Master's thesis at the National University of Science and Technology POLITEHNICA Bucharest, supervised by Conf.\ Traian Rebedea. Training was performed on the UPB HPC cluster (3$\times$H100 GPUs). Models and datasets are publicly available at \url{https://huggingface.co/Andrefty}.
+\end{ack}
+
+\small{
+\bibliography{bibliography}
+\bibliographystyle{plainnat}
+}
+
+\end{document}
