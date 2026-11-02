@@ -1,3 +1,6 @@
+<!-- <img width="4967" height="7022" alt="Improving_code_vulnerability_detection_using_LLMs_MS_poster_page-0001 (1)" src="https://github.com/user-attachments/assets/aa69c962-a168-488f-a3cf-54f142958997" /> -->
+![BRAIT_Poster](https://github.com/user-attachments/assets/aa69c962-a168-488f-a3cf-54f142958997)
+
 [Complete thesis, BRAIT 2026 short paper and poster](https://github.com/Andrefty/MS_Research/tree/main/Documentation_folder)
 
 To be used with my PrimeVul fork
